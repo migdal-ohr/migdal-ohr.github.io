@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { AssistantChat } from "@/components/crm/AssistantChat";
 
 const KIND_ICON: Record<RequestKind, typeof Bug> = { bug: Bug, feature: Lightbulb, question: HelpCircle };
 const KIND_STYLE: Record<RequestKind, string> = {
@@ -253,7 +254,7 @@ export const RequestsView = () => {
         </div>
         <div>
           <h1 className="font-display text-3xl font-bold">בקשות ותקלות</h1>
-          <p className="text-muted-foreground text-sm">מצאתם תקלה? חסר משהו? כתבו כאן, וזה יגיע למי שמטפל.</p>
+          <p className="text-muted-foreground text-sm">יש שאלה? שאלו את העוזר. מצאתם תקלה או חסר משהו? שלחו פנייה.</p>
         </div>
       </header>
 
@@ -264,11 +265,15 @@ export const RequestsView = () => {
           <Loader2 className="animate-spin text-primary" />
         </div>
       ) : (
-        <Tabs defaultValue={level && openCount ? "handle" : "mine"} dir="rtl">
+        <Tabs defaultValue={level && openCount ? "handle" : "ask"} dir="rtl">
           <TabsList>
+            <TabsTrigger value="ask">שאל את העוזר</TabsTrigger>
             <TabsTrigger value="mine">הפניות שלי ({mine.length})</TabsTrigger>
             {level && <TabsTrigger value="handle">לטיפולי ({openCount})</TabsTrigger>}
           </TabsList>
+          <TabsContent value="ask" className="mt-4">
+            <AssistantChat />
+          </TabsContent>
           <TabsContent value="mine" className="space-y-4 mt-4">
             <NewRequestForm onSent={load} />
             {mine.length === 0 ? (
@@ -281,7 +286,7 @@ export const RequestsView = () => {
             <TabsContent value="handle" className="space-y-4 mt-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm text-muted-foreground">
-                  {isAdmin ? "כל הפניות במערכת. פניות של מנהלת הרישום מגיעות ישר אליך." : "פניות של המזכירות והמראיינים. מה שצריך שינוי במערכת — העבירי למנהל המערכת."}
+                  {isAdmin ? "כל הפניות במערכת: גם מה שהמזכירות שולחות למנהלת הרישום, וגם מה שמגיע ישר אליך." : "פניות של המזכירות והמראיינים. מה שצריך שינוי במערכת — העבירי למנהל המערכת."}
                 </p>
                 <Select value={filter} onValueChange={(v) => setFilter(v as "open" | "all")}>
                   <SelectTrigger className="w-32" aria-label="סינון">

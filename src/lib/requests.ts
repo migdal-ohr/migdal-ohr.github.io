@@ -64,7 +64,8 @@ export const useOpenRequestsCount = (role: Role | null, userId?: string): number
       .on("postgres_changes", { event: "*", schema: "public", table: "requests" }, (p) => {
         load();
         const n = p.new as Partial<StaffRequest> | undefined;
-        const mineToHandle = n && n.author_id !== userId && (level === "admin" ? n.level === "admin" : n.level === "manager");
+        // the admin hears about every new request (also those the manager handles)
+        const mineToHandle = n && n.author_id !== userId && (level === "admin" || n.level === "manager");
         if (p.eventType === "INSERT" && mineToHandle) toast.info(`פנייה חדשה: ${n?.title ?? ""}`, { description: n?.author_name ?? undefined });
         if (p.eventType === "UPDATE" && level === "admin" && n?.level === "admin" && (p.old as Partial<StaffRequest>)?.level === "manager")
           toast.info(`פנייה הועברה אליך: ${n?.title ?? ""}`);
