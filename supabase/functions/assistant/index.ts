@@ -61,32 +61,57 @@ Deno.serve(async (req) => {
     const { count } = await sb.from("assistant_usage").select("id", { count: "exact", head: true }).eq("user_id", u.user.id).gte("created_at", since);
     if ((count ?? 0) >= DAILY_LIMIT) return json({ error: "הגעת למכסת השאלות להיום. נסו שוב מחר, או שלחו פנייה." }, 429);
 
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) return json({ error: "העוזר עוד לא הופעל (חסר מפתח). פנו למנהל המערכת." }, 503);
-    const client = new Anthropic({ apiKey });
-
     const who = `מי ששואל: ${prof.full_name || "איש צוות"}, תפקיד: ${ROLE_HE[prof.role] ?? prof.role}.`;
-    const response = await client.beta.messages.create({
-      model: "claude-opus-5-5",
-      max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: "low" },
-      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-      messages: [...messages.slice(0, -1), { role: "user", content: `${who}\n\n${(messages[messages.length - 1].content as string)}` }],
-    });
+    const lastQ = `${who}\n\n${messages[messages.length - 1].content as string}`;
+    let answer = "";
+    let usage = { input_tokens: 0, output_tokens: 0 };
 
-    await sb.from("assistant_usage").insert({
-      input_tokens: response.usage.input_tokens + (response.usage.cache_read_input_tokens ?? 0) + (response.usage.cache_creation_input_tokens ?? 0),
-      output_tokens: response.usage.output_tokens,
-    });
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (geminiKey) {
+      // Google Gemini (REST generateContent). Model can be changed with the GEMINI_MODEL secret.
+      const model = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
+      const contents = [...messages.slice(0, -1), { role: "user", content: lastQ }].map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content as string }],
+      }));
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents, generationConfig: { maxOutputTokens: 8192 } }),
+      });
+      const g = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        console.error("gemini error", r.status, JSON.stringify(g).slice(0, 500));
+        return json({ error: r.status === 429 ? "העוזר עמוס כרגע, נסו שוב בעוד דקה." : "העוזר לא זמין כרגע, נסו שוב." }, r.status === 429 ? 429 : 502);
+      }
+      const cand = g?.candidates?.[0];
+      answer = (cand?.content?.parts ?? []).map((p: { text?: string; thought?: boolean }) => (p.thought ? "" : p.text ?? "")).join("").trim();
+      if (!answer && (cand?.finishReason === "SAFETY" || g?.promptFeedback?.blockReason)) answer = "לא אוכל לעזור בשאלה הזו. אפשר לנסח אחרת, או לשלוח פנייה במסך \"בקשות ותקלות\".";
+      usage = { input_tokens: g?.usageMetadata?.promptTokenCount ?? 0, output_tokens: g?.usageMetadata?.candidatesTokenCount ?? 0 };
+    } else if (anthropicKey) {
+      const client = new Anthropic({ apiKey: anthropicKey });
+      const response = await client.beta.messages.create({
+        model: "claude-opus-5-5",
+        max_tokens: 16000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "low" },
+        system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+        messages: [...messages.slice(0, -1), { role: "user", content: lastQ }],
+      });
+      usage = {
+        input_tokens: response.usage.input_tokens + (response.usage.cache_read_input_tokens ?? 0) + (response.usage.cache_creation_input_tokens ?? 0),
+        output_tokens: response.usage.output_tokens,
+      };
+      answer = response.stop_reason === "refusal"
+        ? "לא אוכל לעזור בשאלה הזו. אפשר לנסח אחרת, או לשלוח פנייה במסך \"בקשות ותקלות\"."
+        : response.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("\n").trim();
+    } else {
+      return json({ error: "העוזר עוד לא הופעל (חסר מפתח). פנו למנהל המערכת." }, 503);
+    }
 
-    if (response.stop_reason === "refusal") return json({ answer: "לא אוכל לעזור בשאלה הזו. אפשר לנסח אחרת, או לשלוח פנייה במסך \"בקשות ותקלות\"." });
-    const answer = response.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as { text: string }).text)
-      .join("\n")
-      .trim();
+    await sb.from("assistant_usage").insert(usage);
     return json({ answer: answer || "לא הצלחתי לענות הפעם, נסו לנסח אחרת." });
   } catch (e) {
     const status = e instanceof Anthropic.RateLimitError ? 429 : e instanceof Anthropic.APIError ? 502 : 500;
