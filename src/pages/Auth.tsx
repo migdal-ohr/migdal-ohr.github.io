@@ -54,20 +54,6 @@ const Auth = () => {
   // Public self-registration is intentionally disabled. Staff accounts are
   // provisioned by an admin via the backend dashboard.
 
-  const sendReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
-      redirectTo: `${publicBaseUrl() || window.location.origin}/reset-password`,
-    });
-    setLoading(false);
-    if (error) toast.error(he(error.message));
-    else {
-      toast.success("אם האימייל רשום במערכת — נשלח אליו קישור לאיפוס סיסמה");
-      setForgotOpen(false);
-    }
-  };
-
   return (
     <div dir="rtl" className="min-h-screen flex items-center justify-center bg-gradient-soft p-4">
       <Card className="w-full max-w-md shadow-card rounded-2xl">
@@ -77,19 +63,16 @@ const Auth = () => {
         </CardHeader>
         <CardContent>
           {forgotOpen ? (
-            <form onSubmit={sendReset} className="space-y-3 pt-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="forgot-email">אימייל</Label>
-                <Input id="forgot-email" type="email" dir="ltr" required value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} />
-              </div>
-              <Button className="w-full" disabled={loading}>
-                {loading && <Loader2 className="animate-spin" />}
-                שלח קישור איפוס
-              </Button>
+            <div className="space-y-4 pt-3 text-center">
+              <p className="text-sm leading-relaxed">
+                לאיפוס סיסמה פנו למנהל המערכת.
+                <br />
+                הוא קובע לכם סיסמה חדשה תוך דקה, במסך <b>"ניהול מערכת"</b>.
+              </p>
               <Button type="button" variant="ghost" className="w-full" onClick={() => setForgotOpen(false)}>
                 חזרה לכניסה
               </Button>
-            </form>
+            </div>
           ) : (
             <form onSubmit={signIn} className="space-y-3 pt-3">
               <div className="space-y-1.5">
