@@ -1,0 +1,4 @@
+project_id = "xojlwnrovseczhgzahgb"
+
+[functions.confirm-attendance]
+verify_jwt = false

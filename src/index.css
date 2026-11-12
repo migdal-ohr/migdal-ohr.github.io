@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Surfaces — warm friendly off-white */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 14%;
+
+    /* Primary — friendly indigo */
+    --primary: 230 70% 56%;
+    --primary-foreground: 0 0% 100%;
+    --primary-soft: 230 90% 96%;
+
+    /* Secondary — warm teal accent */
+    --secondary: 190 60% 94%;
+    --secondary-foreground: 200 70% 22%;
+
+    --muted: 220 25% 95%;
+    --muted-foreground: 220 12% 45%;
+
+    --accent: 270 70% 96%;
+    --accent-foreground: 270 50% 30%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 60% 94%;
+
+    --warning: 35 95% 55%;
+    --warning-foreground: 30 60% 15%;
+    --warning-soft: 40 95% 94%;
+
+    --info: 210 90% 56%;
+    --info-soft: 210 90% 95%;
+
+    --border: 220 20% 90%;
+    --input: 220 20% 90%;
+    --ring: 230 70% 56%;
+
+    --radius: 0.85rem;
+
+    /* Kanban column tints */
+    --col-leads: 210 90% 95%;
+    --col-meeting: 270 70% 95%;
+    --col-docs: 40 95% 92%;
+    --col-done: 152 60% 92%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(230 70% 56%), hsl(260 70% 60%));
+    --gradient-soft: linear-gradient(180deg, hsl(210 40% 99%), hsl(220 30% 96%));
+    --shadow-soft: 0 1px 2px hsl(220 30% 20% / 0.04), 0 4px 16px hsl(220 30% 20% / 0.06);
+    --shadow-card: 0 1px 3px hsl(220 30% 20% / 0.05), 0 8px 24px hsl(220 30% 20% / 0.05);
+    --shadow-pop: 0 12px 32px hsl(230 50% 30% / 0.18);
+  }
+
+  .dark {
+    --background: 222 30% 10%;
+    --foreground: 210 40% 96%;
+    --card: 222 30% 13%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 30% 13%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 230 80% 65%;
+    --primary-foreground: 222 30% 10%;
+    --primary-soft: 230 40% 22%;
+    --secondary: 200 30% 20%;
+    --secondary-foreground: 200 60% 90%;
+    --muted: 220 20% 18%;
+    --muted-foreground: 220 15% 65%;
+    --accent: 270 30% 22%;
+    --accent-foreground: 270 60% 90%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 20% 22%;
+    --input: 220 20% 22%;
+    --ring: 230 80% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    direction: rtl;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Heebo', 'Assistant', system-ui, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Assistant', 'Heebo', sans-serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .card-soft {
+    @apply bg-card rounded-2xl border border-border;
+    box-shadow: var(--shadow-soft);
+  }
+  .card-elev {
+    @apply bg-card rounded-2xl border border-border;
+    box-shadow: var(--shadow-card);
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+}
+
+/* Large RSVP toast override — Sonner */
+[data-sonner-toast].rsvp-mega-toast {
+  min-width: 420px;
+  padding: 20px 22px;
+  border-width: 2px;
+  border-radius: 18px;
+  box-shadow: 0 20px 45px -15px hsl(var(--foreground) / 0.35);
+  font-size: 1.05rem;
+}
+[data-sonner-toast].rsvp-mega-toast [data-title] {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+[data-sonner-toast].rsvp-mega-toast [data-icon] {
+  width: 32px;
+  height: 32px;
+}
