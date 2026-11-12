@@ -1,0 +1,42 @@
+// Routing + permissions of staff requests against the live DB (temporary e2e users).
+import { createClient } from "@supabase/supabase-js";
+const URL = process.env.SB_URL, KEY = process.env.SB_KEY, PW = process.env.E2E_PW;
+const login = async (r) => { const c = createClient(URL, KEY, { auth: { persistSession: false } }); const { error } = await c.auth.signInWithPassword({ email: `e2e-${r}@test.local`, password: PW }); if (error) throw error; return c; };
+let fails = 0; const ok = (n, c) => { if (!c) fails++; console.log(`${c ? "PASS" : "FAIL"} ${n}`); };
+const [adm, mgr, sec, vw] = await Promise.all(["admin", "manager", "secretary", "viewer"].map(login));
+const ins = async (c, t) => (await c.from("requests").insert({ kind: "bug", title: t, body: "x", level: "admin", status: "done" }).select().single());
+const s1 = await ins(sec, "E2E secretary bug");
+ok("secretary can submit", !s1.error);
+ok("secretary request routed to manager (ignores forged level/status)", s1.data?.level === "manager" && s1.data?.status === "new");
+const m1 = await ins(mgr, "E2E manager idea");
+ok("manager request routed to admin", m1.data?.level === "admin");
+const v1 = await ins(vw, "E2E viewer question");
+ok("viewer can submit", !v1.error && v1.data?.level === "manager");
+const see = async (c, id) => ((await c.from("requests").select("id").eq("id", id)).data ?? []).length === 1;
+ok("manager sees secretary request", await see(mgr, s1.data.id));
+ok("admin sees secretary request", await see(adm, s1.data.id));
+ok("viewer does NOT see secretary request", !(await see(vw, s1.data.id)));
+ok("secretary does NOT see manager request", !(await see(sec, m1.data.id)));
+ok("admin sees manager request", await see(adm, m1.data.id));
+// secretary cannot update even own
+const su = await sec.from("requests").update({ status: "done" }).eq("id", s1.data.id).select();
+ok("secretary cannot change status", (su.data ?? []).length === 0);
+// manager handles + escalates; cannot rewrite title
+const mu = await mgr.from("requests").update({ status: "in_progress", response: "בודקת", title: "hacked" }).eq("id", s1.data.id).select().single();
+ok("manager updates status/response", mu.data?.status === "in_progress" && mu.data?.response === "בודקת");
+ok("title cannot be rewritten", mu.data?.title === "E2E secretary bug");
+const me = await mgr.from("requests").update({ level: "admin" }).eq("id", s1.data.id).select();
+ok("manager escalates to admin", !me.error);
+const back = await mgr.from("requests").update({ level: "manager" }).eq("id", s1.data.id).select();
+ok("manager cannot pull it back", !!back.error || (back.data ?? []).length === 0);
+ok("manager still sees what she escalated", await see(mgr, s1.data.id));
+const mu2 = await mgr.from("requests").update({ status: "done" }).eq("id", m1.data.id).select();
+ok("manager cannot handle admin-level requests", (mu2.data ?? []).length === 0);
+const au = await adm.from("requests").update({ status: "done", version: "3.1.0", response: "נוסף" }).eq("id", s1.data.id).select().single();
+ok("admin closes with version", au.data?.status === "done" && au.data?.version === "3.1.0");
+const mine = await sec.from("requests").select("*").eq("id", s1.data.id).single();
+ok("author sees answer + version", mine.data?.response === "נוסף" && mine.data?.version === "3.1.0");
+const anon = createClient(URL, KEY, { auth: { persistSession: false } });
+ok("anonymous sees nothing", ((await anon.from("requests").select("id")).data ?? []).length === 0);
+await adm.from("requests").delete().like("title", "E2E%");
+console.log(fails ? `${fails} FAILED` : "ALL REQUEST CHECKS PASSED");

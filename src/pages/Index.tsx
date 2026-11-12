@@ -12,6 +12,7 @@ const PersuasionView = lazy(() => import("@/components/crm/PersuasionView").then
 const ArchiveView = lazy(() => import("@/components/crm/ArchiveView").then((m) => ({ default: m.ArchiveView })));
 const StudentsTable = lazy(() => import("@/components/crm/StudentsTable").then((m) => ({ default: m.StudentsTable })));
 const AdminView = lazy(() => import("@/components/crm/AdminView").then((m) => ({ default: m.AdminView })));
+const RequestsView = lazy(() => import("@/components/crm/RequestsView").then((m) => ({ default: m.RequestsView })));
 const StatsView = lazy(() => import("@/components/crm/StatsView").then((m) => ({ default: m.StatsView })));
 import { FamilyProfile } from "@/components/crm/FamilyProfile";
 import { StudentForm } from "@/components/crm/StudentForm";
@@ -20,7 +21,7 @@ import { RsvpToastListener } from "@/components/crm/RsvpToastListener";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
-const VIEWS: View[] = ["dashboard", "students", "kanban", "calendar", "persuasion", "potentials", "stats", "archive", "admin"];
+const VIEWS: View[] = ["dashboard", "students", "kanban", "calendar", "persuasion", "potentials", "stats", "archive", "requests", "admin"];
 
 /** Keep the current screen in the URL hash so refresh / back button work. */
 const viewFromHash = (): View => {
@@ -140,6 +141,7 @@ const Shell = () => {
               {view === "potentials" && <PotentialsView onOpenFamily={openFamily} />}
               {view === "stats" && <StatsView onOpenFamily={openFamily} />}
               {view === "archive" && <ArchiveView onOpenFamily={openFamily} />}
+              {view === "requests" && <RequestsView />}
               {view === "admin" && <AdminView />}
             </Suspense>
           )}

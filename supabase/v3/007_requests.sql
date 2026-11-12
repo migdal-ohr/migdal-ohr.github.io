@@ -1,0 +1,4 @@
+-- Applied as migrations v3_007_requests + v3_008_requests_manager_sees_escalated (see the project's schema_migrations
+-- for the exact text). Staff requests (bug / feature / question) routed by rank:
+-- secretary / interviewer / viewer → registration manager; manager / admin → system admin.
+-- Trigger tg_requests stamps author, routes level, locks the author's words; RLS limits who reads/handles.
