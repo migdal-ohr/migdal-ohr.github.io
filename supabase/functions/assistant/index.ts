@@ -2,7 +2,6 @@
 // Knows the system from KNOWLEDGE; never sees student data. Signed-in active staff only, rate-limited.
 import Anthropic from "npm:@anthropic-ai/sdk@1.8.0";
 import { createClient } from "npm:@supabase/supabase-js@2.49.4";
-import { KNOWLEDGE } from "./knowledge.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +20,7 @@ const ROLE_HE: Record<string, string> = {
   viewer: "צפייה בלבד",
 };
 
-const SYSTEM = `את/ה "העוזר של מערכת הרישום" של מוסדות מגדל אור. עונים לצוות (מזכירות, מנהלים, מראיינים) על שאלות איך משתמשים במערכת.
+const RULES = `את/ה "העוזר של מערכת הרישום" של מוסדות מגדל אור. עונים לצוות (מזכירות, מנהלים, מראיינים) על שאלות איך משתמשים במערכת.
 
 כללים:
 - עונים תמיד בעברית פשוטה וחמה, קצר וממוקד: צעדים ממוספרים כשמסבירים איך עושים משהו, ושמות כפתורים ומסכים בדיוק כפי שהם מופיעים במערכת (בגרשיים או מודגשים).
@@ -29,9 +28,7 @@ const SYSTEM = `את/ה "העוזר של מערכת הרישום" של מוסד�
 - מתאימים את התשובה לתפקיד של מי ששואל: אם הפעולה דורשת הרשאה שאין לו, אומרים את זה ואומרים למי לפנות.
 - אין לך גישה לנתוני התלמידים ואין לך יכולת לבצע פעולות במערכת. אם מבקשים פרטים על תלמיד מסוים או לבצע פעולה — מסבירים איך עושים את זה בעצמם.
 - אם זו תקלה (משהו לא עובד כמו שצריך) או בקשה לתוספת — מציעים לשלוח פנייה בכפתור "שלח כפנייה" שמתחת לתשובה, או במסך "בקשות ותקלות".
-- לא עונים על נושאים שלא קשורים למערכת; מחזירים בעדינות לנושא.
-
-${KNOWLEDGE}`;
+- לא עונים על נושאים שלא קשורים למערכת; מחזירים בעדינות לנושא.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -61,6 +58,10 @@ Deno.serve(async (req) => {
     const { count } = await sb.from("assistant_usage").select("id", { count: "exact", head: true }).eq("user_id", u.user.id).gte("created_at", since);
     if ((count ?? 0) >= DAILY_LIMIT) return json({ error: "הגעת למכסת השאלות להיום. נסו שוב מחר, או שלחו פנייה." }, 429);
 
+    // the system guide lives in app_settings.assistant_knowledge (updated without redeploying)
+    const { data: kb } = await sb.from("app_settings").select("value").eq("key", "assistant_knowledge").maybeSingle();
+    const SYSTEM = `${RULES}\n\n${typeof kb?.value === "string" ? kb.value : ""}`;
+
     const who = `מי ששואל: ${prof.full_name || "איש צוות"}, תפקיד: ${ROLE_HE[prof.role] ?? prof.role}.`;
     const lastQ = `${who}\n\n${messages[messages.length - 1].content as string}`;
     let answer = "";
@@ -70,20 +71,47 @@ Deno.serve(async (req) => {
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (geminiKey) {
       // Google Gemini (REST generateContent). Model can be changed with the GEMINI_MODEL secret.
-      const model = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
+      // primary model (GEMINI_MODEL or the current Flash), then fallbacks when Google is overloaded
+      const models = [...new Set([Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"])];
       const contents = [...messages.slice(0, -1), { role: "user", content: lastQ }].map((m) => ({
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content as string }],
       }));
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents, generationConfig: { maxOutputTokens: 8192 } }),
-      });
-      const g = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        console.error("gemini error", r.status, JSON.stringify(g).slice(0, 500));
-        return json({ error: r.status === 429 ? "העוזר עמוס כרגע, נסו שוב בעוד דקה." : "העוזר לא זמין כרגע, נסו שוב." }, r.status === 429 ? 429 : 502);
+      // short how-to answers need little reasoning: low thinking keeps replies fast
+      const body = (thinking: boolean) =>
+        JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM }] },
+          contents,
+          generationConfig: { maxOutputTokens: 8192, ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}) },
+        });
+      let r: Response | null = null;
+      let g: any = {};
+      attempts: for (const model of models) {
+        let thinking = true;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+              body: body(thinking),
+              signal: AbortSignal.timeout(35_000),
+            });
+            g = await r.json().catch(() => ({}));
+          } catch {
+            console.error("gemini timeout", model);
+            r = new Response(null, { status: 503 });
+            break; // too slow: go straight to the next model
+          }
+          if (r.ok) break attempts;
+          console.error("gemini error", model, r.status, JSON.stringify(g).slice(0, 300));
+          if (r.status === 400 && thinking) { thinking = false; continue; } // model without thinking levels
+          if (r.status === 404) break; // model not available: try the next one
+          if (r.status !== 503 && r.status !== 429 && r.status !== 500) break attempts;
+          await new Promise((res) => setTimeout(res, 800));
+        }
+      }
+      if (!r?.ok) {
+        return json({ error: r?.status === 429 || r?.status === 503 ? "העוזר עמוס כרגע, נסו שוב בעוד דקה." : "העוזר לא זמין כרגע, נסו שוב." }, r?.status === 429 ? 429 : 502);
       }
       const cand = g?.candidates?.[0];
       answer = (cand?.content?.parts ?? []).map((p: { text?: string; thought?: boolean }) => (p.thought ? "" : p.text ?? "")).join("").trim();
