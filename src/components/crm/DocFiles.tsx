@@ -5,6 +5,8 @@ import { useCrm } from "@/store/crmStore";
 import type { DocFile, Family } from "@/types/crm";
 import { toast } from "sonner";
 import { logActivity } from "@/lib/activityLog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { DocViewer } from "@/components/crm/file/DocViewer";
 
 const MAX_MB = 15;
 
@@ -13,6 +15,7 @@ export const DocFiles = ({ family, docKey, docLabel }: { family: Family; docKey:
   const { updateFamily } = useCrm();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState<DocFile | null>(null);
   const files: DocFile[] = family.files?.[docKey] ?? [];
 
   const upload = async (list: FileList | null) => {
@@ -44,18 +47,8 @@ export const DocFiles = ({ family, docKey, docLabel }: { family: Family; docKey:
     }
   };
 
-  const open = async (f: DocFile) => {
-    const w = window.open("", "_blank");
-    const url = await api.docUrl(f.path);
-    if (!url) {
-      w?.close();
-      return toast.error("לא ניתן לפתוח את הקובץ");
-    }
-    if (w) {
-      if (url.startsWith("data:")) w.document.write(`<iframe src="${url}" style="border:0;width:100%;height:100%"></iframe>`);
-      else w.location.href = url;
-    }
-  };
+  // open the document right here, on screen (no download)
+  const open = (f: DocFile) => setViewing(f);
 
   const remove = async (f: DocFile) => {
     if (!window.confirm(`למחוק את הקובץ "${f.name}"?`)) return;
@@ -98,6 +91,15 @@ export const DocFiles = ({ family, docKey, docLabel }: { family: Family; docKey:
         {busy ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />}
         {files.length ? "" : "צרף"}
       </button>
+      <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto" dir="rtl">
+          <DialogTitle className="text-right">
+            {docLabel} · {family.studentName}
+          </DialogTitle>
+          <DialogDescription className="text-right text-xs">{viewing?.name}</DialogDescription>
+          {viewing && <DocViewer path={viewing.path} name={viewing.name} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

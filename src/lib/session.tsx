@@ -71,6 +71,8 @@ export interface Permissions {
   handleRequests: boolean;
   principalRequest: boolean;
   principalDecide: boolean;
+  /** decides on students but has no general access: sees only the student files sent to him */
+  principalOnly: boolean;
   /** institutions this role is limited to (null = all) */
   institutions: string[] | null;
 }
@@ -106,6 +108,7 @@ export const permsFromRole = (r: RoleRow | null | undefined, active = true): Per
     handleRequests: has("requests.handle"),
     principalRequest: has("principal.request"),
     principalDecide: has("principal.decide"),
+    principalOnly: has("principal.decide") && !has("students.view"),
     institutions: r && !r.is_admin && r.institutions?.length ? r.institutions : null,
   };
 };

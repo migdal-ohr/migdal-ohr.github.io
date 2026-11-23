@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Gavel, Send, Loader2, CheckCircle2, XCircle, Clock, ExternalLink, Inbox, Eye } from "lucide-react";
+import { Gavel, FolderOpen, Send, Loader2, CheckCircle2, XCircle, Clock, ExternalLink, Inbox, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -33,11 +33,25 @@ import {
   getRequiredDocuments,
 } from "@/types/crm";
 import { StudentAvatar } from "@/components/crm/StudentAvatar";
+import { useFamiliesByIds } from "@/lib/api/studentFile";
 
 const fmt = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+  iso
+    ? new Date(iso).toLocaleString("he-IL", {
+        day: "numeric",
+        month: "numeric",
+        year: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
 const fmtDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("he-IL") : "");
-const INTERVIEW_TYPES: Record<string, string> = { social: 'ראיון עו"ס', principal: "ראיון מנהל", exam: "מבחן", other: "ראיון" };
+const INTERVIEW_TYPES: Record<string, string> = {
+  social: 'ראיון עו"ס',
+  principal: "ראיון מנהל",
+  exam: "מבחן",
+  other: "ראיון",
+};
 
 const DecisionBadge = ({ d }: { d: "accept" | "reject" | null }) =>
   d ? (
@@ -50,97 +64,6 @@ const DecisionBadge = ({ d }: { d: "accept" | "reject" | null }) =>
       {d === "accept" ? <CheckCircle2 size={14} /> : <XCircle size={14} />} {DECISION_LABELS[d]}
     </span>
   ) : null;
-
-/* ------------------------------ the student page (replaces the printed sheet) ------------------------------ */
-
-const L = ({ label, value }: { label: string; value?: React.ReactNode }) =>
-  value === undefined || value === null || value === "" ? null : (
-    <div className="text-sm">
-      <span className="text-muted-foreground">{label}: </span>
-      <span className="font-medium">{value}</span>
-    </div>
-  );
-
-export const StudentSheet = ({ family }: { family: Family }) => {
-  const { entries } = useStudentLog(family.id);
-  const { recruiters } = useRecruiters();
-  const interviews = entries.filter((e) => e.kind === "interview" || e.kind === "call");
-  const docs = getRequiredDocuments(family);
-  const missing = docs.filter((d) => !family.documents?.[d.key]);
-  const parent = (p: "father" | "mother") => {
-    const f = family as unknown as Record<string, string | number | boolean | undefined>;
-    const name = f[`${p}Name`];
-    if (!name && !f[`${p}Phone`]) return null;
-    const emp = f[`${p}Employment`] as keyof typeof EMPLOYMENT_LABELS | undefined;
-    return [
-      name,
-      f[`${p}Phone`],
-      emp && emp !== "na" ? EMPLOYMENT_LABELS[emp] : "",
-      p === "father" && family.fatherAvrech ? "אברך" : "",
-      f[`${p}SchoolYears`] ? `${f[`${p}SchoolYears`]} שנות לימוד` : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
-  };
-  return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-3">
-        <StudentAvatar photoUrl={family.photoUrl} photoPath={family.photoPath} name={family.studentName} className="size-16 rounded-2xl bg-muted border" />
-        <div>
-          <div className="font-display text-xl font-bold">{family.studentName}</div>
-          <div className="text-sm text-muted-foreground">
-            {GRADE_LABEL[family.grade]}
-            {family.registrationTrack ? ` · ${REGISTRATION_TRACK_LABELS[family.registrationTrack] ?? family.registrationTrack}` : ""}
-            {family.city ? ` · ${family.city}` : ""}
-          </div>
-        </div>
-      </div>
-      <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
-        <L label="ת״ז" value={family.studentId} />
-        <L label="תאריך לידה" value={fmtDate(family.birthDate)} />
-        <L label="כתובת" value={[family.address, family.city].filter(Boolean).join(", ")} />
-        <L label="קופת חולים" value={family.hmo && HMO_LABELS[family.hmo]} />
-        <L label="שיוך דתי" value={family.religious && RELIGIOUS_LABELS[family.religious]} />
-        <L label="מצב משפחתי" value={family.familyStatus && FAMILY_STATUS_LABELS[family.familyStatus]} />
-        <L label="אבא" value={parent("father")} />
-        <L label="אמא" value={parent("mother")} />
-        <L label="מספר אחים" value={family.siblingsCount} />
-        <L label="בית ספר קודם" value={[family.prevSchool, family.prevCity, family.prevGrade && `כיתה ${family.prevGrade}`].filter(Boolean).join(" · ")} />
-        <L label="פעיל מגייס" value={recruiters.find((r) => r.id === family.recruiterId)?.name} />
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {STATION_ORDER.map((k) => (
-          <span key={k} className={cn("rounded-full border px-2.5 py-0.5 text-xs", family.stations?.[k] ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "text-muted-foreground")}>
-            {family.stations?.[k] ? "✓ " : ""}
-            {STATION_LABELS[k]}
-          </span>
-        ))}
-        <span className={cn("rounded-full border px-2.5 py-0.5 text-xs", missing.length ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-emerald-50 border-emerald-200 text-emerald-800")}>
-          מסמכים {docs.length - missing.length}/{docs.length}
-        </span>
-      </div>
-      {family.notes && (
-        <div className="rounded-xl bg-muted/50 p-3 text-sm whitespace-pre-wrap">
-          <div className="text-xs font-semibold text-muted-foreground mb-1">הערות</div>
-          {family.notes}
-        </div>
-      )}
-      {interviews.length > 0 && (
-        <div className="space-y-2">
-          <div className="text-xs font-semibold text-muted-foreground">ראיונות ושיחות</div>
-          {interviews.slice(0, 8).map((e) => (
-            <div key={e.id} className="rounded-xl border p-2.5 text-sm">
-              <div className="text-xs text-muted-foreground">
-                {e.kind === "interview" ? INTERVIEW_TYPES[e.subtype ?? "other"] ?? "ראיון" : `שיחה${e.participant ? ` עם ${e.participant}` : ""}`} · {fmt(e.at)} · {e.author_name}
-              </div>
-              <div className="whitespace-pre-wrap mt-0.5">{e.summary}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
 
 /* ------------------------------ the principal's form ------------------------------ */
 
@@ -220,6 +143,7 @@ export const PrincipalCardSection = ({ family }: { family: Family }) => {
   const [note, setNote] = useState("");
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   const mine = reviews.filter((r) => r.student_id === family.id);
   const pending = mine.find((r) => r.status === "pending");
   const last = mine.find((r) => r.status === "decided");
@@ -253,8 +177,14 @@ export const PrincipalCardSection = ({ family }: { family: Family }) => {
             </span>
           </div>
           {last.summary && <p className="text-sm whitespace-pre-wrap">{last.summary}</p>}
+          {can.principalDecide && !pending && !editing && (
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-primary" onClick={() => setEditing(true)}>
+              עריכת ההחלטה
+            </Button>
+          )}
         </div>
       )}
+      {last && editing && !pending && <DecisionForm review={last} onDone={() => setEditing(false)} />}
       {pending ? (
         can.principalDecide ? (
           <DecisionForm review={pending} />
@@ -262,7 +192,12 @@ export const PrincipalCardSection = ({ family }: { family: Family }) => {
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
             <Clock size={15} className="text-amber-700" /> ממתין להחלטת מנהל · נשלח ע״י {pending.requested_by_name} · {fmt(pending.requested_at)}
             {can.principalRequest && (pending.requested_by === profile?.user_id || can.isAdmin) && (
-              <Button size="sm" variant="ghost" className="ms-auto h-7" onClick={() => cancelPrincipalReview(pending.id).catch((e) => toast.error(String(e?.message ?? e)))}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="ms-auto h-7"
+                onClick={() => cancelPrincipalReview(pending.id).catch((e) => toast.error(String(e?.message ?? e)))}
+              >
                 ביטול השליחה
               </Button>
             )}
@@ -294,11 +229,11 @@ export const PrincipalCardSection = ({ family }: { family: Family }) => {
 
 /* ------------------------------ the inbox screen ------------------------------ */
 
-export const PrincipalView = ({ onOpenFamily }: { onOpenFamily: (id: string) => void }) => {
+export const PrincipalView = ({ onOpenFamily, onOpenFile }: { onOpenFamily: (id: string) => void; onOpenFile: (id: string) => void }) => {
   const { can, profile } = useSession();
   const { reviews } = usePrincipalReviews(true);
-  const { getFamily, updateFamily } = useCrm();
-  const [openId, setOpenId] = useState<string | null>(null);
+  const { updateFamily } = useCrm();
+  const { get: getFamily } = useFamiliesByIds(reviews.map((r) => r.student_id));
 
   const withFamily = (list: PrincipalReview[]) => list.filter((r) => getFamily(r.student_id));
   const pending = withFamily(reviews.filter((r) => r.status === "pending"));
@@ -306,13 +241,13 @@ export const PrincipalView = ({ onOpenFamily }: { onOpenFamily: (id: string) => 
   const myDecisions = decided.filter((r) => r.decided_by === profile?.user_id);
   const unseen = decided.filter((r) => !r.seen_at);
   const def = can.principalDecide ? "decide" : "answers";
-  const open = reviews.find((r) => r.id === openId) ?? null;
-  const openFamily = open ? getFamily(open.student_id) : undefined;
 
   const applyOutcome = async (r: PrincipalReview) => {
     if (!r.decision) return;
     try {
-      await updateFamily(r.student_id, { outcome: r.decision === "accept" ? "accepted" : "rejected" });
+      await updateFamily(r.student_id, {
+        outcome: r.decision === "accept" ? "accepted" : "rejected",
+      });
       if (!r.seen_at) await markReviewSeen(r.id);
       toast.success(`עודכן בכרטיס: ${r.decision === "accept" ? "התקבל" : "לא התקבל"}`);
     } catch (e) {
@@ -337,8 +272,8 @@ export const PrincipalView = ({ onOpenFamily }: { onOpenFamily: (id: string) => 
         {showDecision && <DecisionBadge d={r.decision} />}
         <div className="flex flex-wrap gap-1.5">
           {!showDecision && can.principalDecide && (
-            <Button size="sm" onClick={() => setOpenId(r.id)}>
-              <Gavel size={14} /> לפתיחה ולהחלטה
+            <Button size="sm" onClick={() => onOpenFile(r.student_id)}>
+              <Gavel size={14} /> פתיחת התיק והחלטה
             </Button>
           )}
           {showDecision && can.principalRequest && can.status && f.outcome !== (r.decision === "accept" ? "accepted" : "rejected") && (
@@ -351,9 +286,16 @@ export const PrincipalView = ({ onOpenFamily }: { onOpenFamily: (id: string) => 
               <Eye size={14} /> סמן כנקרא
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={() => onOpenFamily(f.id)}>
-            <ExternalLink size={14} /> כרטיס
-          </Button>
+          {(showDecision || !can.principalDecide) && (
+            <Button size="sm" variant="ghost" onClick={() => onOpenFile(f.id)}>
+              <FolderOpen size={14} /> תיק תלמיד
+            </Button>
+          )}
+          {!can.principalOnly && (
+            <Button size="sm" variant="ghost" onClick={() => onOpenFamily(f.id)}>
+              <ExternalLink size={14} /> כרטיס
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -373,65 +315,51 @@ export const PrincipalView = ({ onOpenFamily }: { onOpenFamily: (id: string) => 
         </div>
       </header>
 
-      {open && openFamily ? (
-        <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-          <div className="card-elev p-5">
-            <StudentSheet family={openFamily} />
-          </div>
-          <div className="space-y-3">
-            {can.principalDecide && <DecisionForm review={open} onDone={() => setOpenId(null)} />}
-            <Button variant="outline" className="w-full" onClick={() => setOpenId(null)}>
-              חזרה לרשימה
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Tabs defaultValue={def} dir="rtl">
-          <TabsList>
-            {can.principalDecide && <TabsTrigger value="decide">ממתינים להחלטה ({pending.length})</TabsTrigger>}
-            {can.principalDecide && <TabsTrigger value="mine">החלטות שלי ({myDecisions.length})</TabsTrigger>}
-            {can.principalRequest && <TabsTrigger value="answers">תשובות המנהל{unseen.length ? ` (${unseen.length} חדשות)` : ""}</TabsTrigger>}
-            {can.principalRequest && <TabsTrigger value="sent">ממתינים לתשובה ({pending.length})</TabsTrigger>}
-          </TabsList>
-          {can.principalDecide && (
-            <TabsContent value="decide" className="space-y-2 mt-4">
-              {pending.length === 0 && <Empty text="אין תלמידים שממתינים להחלטה 🎉" />}
-              {pending.map((r) => (
-                <Row key={r.id} r={r} />
-              ))}
-            </TabsContent>
-          )}
-          {can.principalDecide && (
-            <TabsContent value="mine" className="space-y-2 mt-4">
-              {myDecisions.length === 0 && <Empty text="עוד לא נשלחו החלטות" />}
-              {myDecisions.map((r) => (
-                <div key={r.id} className="space-y-1">
-                  <Row r={r} showDecision />
-                  <button className="text-xs text-primary hover:underline" onClick={() => setOpenId(r.id)}>
-                    עריכת ההחלטה
-                  </button>
-                </div>
-              ))}
-            </TabsContent>
-          )}
-          {can.principalRequest && (
-            <TabsContent value="answers" className="space-y-2 mt-4">
-              {decided.length === 0 && <Empty text="עוד אין תשובות מהמנהל" />}
-              {decided.map((r) => (
-                <Row key={r.id} r={r} showDecision />
-              ))}
-            </TabsContent>
-          )}
-          {can.principalRequest && (
-            <TabsContent value="sent" className="space-y-2 mt-4">
-              {pending.length === 0 && <Empty text="אין תלמידים שממתינים לתשובה" />}
-              {pending.map((r) => (
-                <Row key={r.id} r={r} />
-              ))}
-            </TabsContent>
-          )}
-        </Tabs>
-      )}
+      <Tabs defaultValue={def} dir="rtl">
+        <TabsList>
+          {can.principalDecide && <TabsTrigger value="decide">ממתינים להחלטה ({pending.length})</TabsTrigger>}
+          {can.principalDecide && <TabsTrigger value="mine">החלטות שלי ({myDecisions.length})</TabsTrigger>}
+          {can.principalRequest && <TabsTrigger value="answers">תשובות המנהל{unseen.length ? ` (${unseen.length} חדשות)` : ""}</TabsTrigger>}
+          {can.principalRequest && <TabsTrigger value="sent">ממתינים לתשובה ({pending.length})</TabsTrigger>}
+        </TabsList>
+        {can.principalDecide && (
+          <TabsContent value="decide" className="space-y-2 mt-4">
+            {pending.length === 0 && <Empty text="אין תלמידים שממתינים להחלטה 🎉" />}
+            {pending.map((r) => (
+              <Row key={r.id} r={r} />
+            ))}
+          </TabsContent>
+        )}
+        {can.principalDecide && (
+          <TabsContent value="mine" className="space-y-2 mt-4">
+            {myDecisions.length === 0 && <Empty text="עוד לא נשלחו החלטות" />}
+            {myDecisions.map((r) => (
+              <div key={r.id} className="space-y-1">
+                <Row r={r} showDecision />
+                <button className="text-xs text-primary hover:underline" onClick={() => onOpenFile(r.student_id)}>
+                  עריכת ההחלטה
+                </button>
+              </div>
+            ))}
+          </TabsContent>
+        )}
+        {can.principalRequest && (
+          <TabsContent value="answers" className="space-y-2 mt-4">
+            {decided.length === 0 && <Empty text="עוד אין תשובות מהמנהל" />}
+            {decided.map((r) => (
+              <Row key={r.id} r={r} showDecision />
+            ))}
+          </TabsContent>
+        )}
+        {can.principalRequest && (
+          <TabsContent value="sent" className="space-y-2 mt-4">
+            {pending.length === 0 && <Empty text="אין תלמידים שממתינים לתשובה" />}
+            {pending.map((r) => (
+              <Row key={r.id} r={r} />
+            ))}
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 };
@@ -457,28 +385,45 @@ export const usePrincipalBadge = () => {
 };
 
 /** Popups: a new student for the principal; a decision back to the registration staff. */
-export const PrincipalAlerts = ({ onOpenFamily, onOpenInbox }: { onOpenFamily: (id: string) => void; onOpenInbox: () => void }) => {
+export const PrincipalAlerts = ({ onOpenFile }: { onOpenFile: (id: string) => void }) => {
   const { can, profile } = useSession();
   const { getFamily } = useCrm();
   useEffect(() => {
     if (!profile?.user_id || !(can.principalDecide || can.principalRequest)) return;
     const ch = supabase
       .channel(`principal-alerts-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "principal_reviews" }, (p) => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "principal_reviews" }, async (p) => {
         const r = p.new as PrincipalReview;
         const old = p.old as Partial<PrincipalReview>;
-        const name = getFamily(r?.student_id)?.studentName ?? "תלמיד";
+        let name = getFamily(r?.student_id)?.studentName;
+        if (!name && r?.student_id) {
+          const { data } = await supabase.from("students").select("first_name, last_name").eq("id", r.student_id).maybeSingle();
+          name = data ? `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim() : undefined;
+        }
+        name ||= "תלמיד";
         if (p.eventType === "INSERT" && can.principalDecide && r.requested_by !== profile.user_id) {
           toast.info(`תלמיד חדש ממתין להחלטתך: ${name}`, {
             description: r.request_note ?? `נשלח ע״י ${r.requested_by_name ?? ""}`,
-            action: { label: "לפתיחה", onClick: onOpenInbox },
+            action: {
+              label: "פתיחת התיק",
+              onClick: () => onOpenFile(r.student_id),
+            },
             duration: 20000,
           });
         }
-        if (p.eventType === "UPDATE" && r.status === "decided" && old?.decided_at !== r.decided_at && can.principalRequest && r.decided_by !== profile.user_id) {
+        if (
+          p.eventType === "UPDATE" &&
+          r.status === "decided" &&
+          old?.decided_at !== r.decided_at &&
+          can.principalRequest &&
+          r.decided_by !== profile.user_id
+        ) {
           toast.success(`החלטת מנהל: ${name} — ${r.decision ? DECISION_LABELS[r.decision] : ""}`, {
             description: (r.summary ?? "").slice(0, 160),
-            action: { label: "פתח כרטיס", onClick: () => onOpenFamily(r.student_id) },
+            action: {
+              label: "פתיחת התיק",
+              onClick: () => onOpenFile(r.student_id),
+            },
             duration: 30000,
           });
         }
@@ -487,6 +432,6 @@ export const PrincipalAlerts = ({ onOpenFamily, onOpenInbox }: { onOpenFamily: (
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [profile?.user_id, can.principalDecide, can.principalRequest, getFamily, onOpenFamily, onOpenInbox]);
+  }, [profile?.user_id, can.principalDecide, can.principalRequest, getFamily, onOpenFile]);
   return null;
 };

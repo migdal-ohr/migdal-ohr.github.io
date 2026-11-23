@@ -49,6 +49,7 @@ import {
   Trash2,
   Archive,
   Folder,
+  FolderOpen,
   ChevronDown,
   CheckCircle2,
   Link2,
@@ -68,9 +69,10 @@ interface Props {
   onEdit: (id: string) => void;
   onOpenFamily?: (id: string) => void;
   onAddSibling?: (prefill: Partial<Family>) => void;
+  onOpenFile?: (id: string) => void;
 }
 
-export const FamilyProfile = ({ familyId, onClose, onEdit, onOpenFamily, onAddSibling }: Props) => {
+export const FamilyProfile = ({ familyId, onClose, onEdit, onOpenFamily, onAddSibling, onOpenFile }: Props) => {
   const { getFamily, toggleDocument, toggleStation, deleteFamily, setArchived, getAppointment } = useCrm();
   const can = useCan();
   const family = familyId ? getFamily(familyId) : null;
@@ -136,6 +138,15 @@ export const FamilyProfile = ({ familyId, onClose, onEdit, onOpenFamily, onAddSi
                     {family.studentName}
                   </DialogTitle>
                   <DialogDescription className="sr-only">כרטיס תלמיד</DialogDescription>
+                  {onOpenFile && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenFile(family.id)}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary-foreground text-primary px-3 py-1.5 text-sm font-bold shadow hover:opacity-90"
+                    >
+                      <FolderOpen size={15} /> תיק תלמיד
+                    </button>
+                  )}
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-sm">
                     <Chip>{GRADE_LABEL[family.grade]}</Chip>
                     {family.registrationTrack && <Chip>{REGISTRATION_TRACK_LABELS[family.registrationTrack]}</Chip>}

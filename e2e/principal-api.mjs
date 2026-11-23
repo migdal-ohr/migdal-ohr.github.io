@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 const URL = process.env.SB_URL, KEY = process.env.SB_KEY, PW = process.env.E2E_PW;
 const login = async (r) => { const c = createClient(URL, KEY, { auth: { persistSession: false } }); const { error } = await c.auth.signInWithPassword({ email: `e2e-${r}@test.local`, password: PW }); if (error) throw error; return c; };
 let fails = 0; const ok = (n, c, x = "") => { if (!c) fails++; console.log(`${c ? "PASS" : "FAIL"} ${n} ${x}`); };
-const adm = await login("admin"), mgr = await login("manager"), prin = await login("interviewer"), sec = await login("secretary");
+const adm = await login("admin"), mgr = await login("manager"), prin = await login("principal"), sec = await login("secretary");
 const { data: fx } = await adm.rpc("insert_students", { p_rows: [
   { firstName: "E2E", lastName: "מנהל-מתיבתא", grade: 8, registrationTrack: "metivta" },
   { firstName: "E2E", lastName: "מנהל-מאור", grade: 8, registrationTrack: "maor_israel" }] });
@@ -26,7 +26,7 @@ ok("manager cannot decide", !!m1.error || (m1.data ?? []).length === 0);
 const p0 = await prin.from("principal_reviews").update({ status: "decided" }).eq("id", r1.data.id).select();
 ok("decision requires accept/reject", !!p0.error || (p0.data ?? []).length === 0);
 const p1 = await prin.from("principal_reviews").update({ status: "decided", decision: "accept", summary: "בחור מצוין, מתקבל" }).eq("id", r1.data.id).select().single();
-ok("principal decides", !p1.error && p1.data?.decided_by_name === "בדיקה interviewer", p1.error?.message);
+ok("principal decides", !p1.error && p1.data?.decided_by_name === "בדיקה principal", p1.error?.message);
 const back = (await mgr.from("principal_reviews").select("*").eq("id", r1.data.id).single()).data;
 ok("manager sees decision + summary", back?.decision === "accept" && back?.summary === "בחור מצוין, מתקבל" && !back?.seen_at);
 const p2 = await prin.from("students").update({ first_name: "hack" }).eq("id", met.id).select();

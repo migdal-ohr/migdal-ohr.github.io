@@ -81,11 +81,13 @@ export const SidebarContent = ({ view, onChange, onNavigate, onOpenSearch }: Pro
   const openRequests = useOpenRequestsCount(can, profile?.user_id);
   const principalCount = usePrincipalBadge();
   const visibleItems = items.filter((it) =>
-    it.id === "admin"
-      ? can.manageYears || can.manageUsers || can.lists || can.settings || can.audit
-      : it.id === "principal"
-        ? can.principalDecide || can.principalRequest
-        : true,
+    can.principalOnly
+      ? it.id === "principal"
+      : it.id === "admin"
+        ? can.manageYears || can.manageUsers || can.lists || can.settings || can.audit
+        : it.id === "principal"
+          ? can.principalDecide || can.principalRequest
+          : true,
   );
   const complete = families.filter((f) => f.stage === "complete").length;
   const pct = families.length ? Math.round((complete / families.length) * 100) : 0;
@@ -148,12 +150,7 @@ export const SidebarContent = ({ view, onChange, onNavigate, onOpenSearch }: Pro
               <Icon size={18} />
               <span className="flex-1 text-right">{it.label}</span>
               {count !== undefined && count > 0 && (
-                <span
-                  className={cn(
-                    "text-[11px] font-bold rounded-full px-2 py-0.5",
-                    active ? "bg-primary-foreground/20" : "bg-muted text-muted-foreground",
-                  )}
-                >
+                <span className={cn("text-[11px] font-bold rounded-full px-2 py-0.5", active ? "bg-primary-foreground/20" : "bg-muted text-muted-foreground")}>
                   {count.toLocaleString("he-IL")}
                 </span>
               )}
@@ -161,50 +158,54 @@ export const SidebarContent = ({ view, onChange, onNavigate, onOpenSearch }: Pro
           );
         })}
       </nav>
-      <div className="p-4 m-3 rounded-xl bg-gradient-soft border border-border text-xs text-muted-foreground space-y-2">
-        {years.length > 1 ? (
-          <Select value={yearId ?? undefined} onValueChange={setYearId}>
-            <SelectTrigger className="h-8 bg-card text-xs font-semibold" aria-label="שנת רישום">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {years.map((y) => (
-                <SelectItem key={y.id} value={y.id}>
-                  רישום לשנה״ל {y.name}
-                  {y.is_current ? " (נוכחית)" : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <div className="font-semibold text-foreground">{selectedYear ? `רישום לשנה״ל ${selectedYear.name}` : schoolYear()}</div>
-        )}
-        {selectedYear && !selectedYear.is_current && <div className="text-warning-foreground font-semibold">צפייה בשנה קודמת</div>}
-        <div className="flex justify-between">
-          <span>השלימו רישום</span>
-          <span className="font-bold text-foreground">
-            {complete.toLocaleString("he-IL")} מתוך {families.length.toLocaleString("he-IL")}
-          </span>
+      {!can.principalOnly && (
+        <div className="p-4 m-3 rounded-xl bg-gradient-soft border border-border text-xs text-muted-foreground space-y-2">
+          {years.length > 1 ? (
+            <Select value={yearId ?? undefined} onValueChange={setYearId}>
+              <SelectTrigger className="h-8 bg-card text-xs font-semibold" aria-label="שנת רישום">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((y) => (
+                  <SelectItem key={y.id} value={y.id}>
+                    רישום לשנה״ל {y.name}
+                    {y.is_current ? " (נוכחית)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="font-semibold text-foreground">{selectedYear ? `רישום לשנה״ל ${selectedYear.name}` : schoolYear()}</div>
+          )}
+          {selectedYear && !selectedYear.is_current && <div className="text-warning-foreground font-semibold">צפייה בשנה קודמת</div>}
+          <div className="flex justify-between">
+            <span>השלימו רישום</span>
+            <span className="font-bold text-foreground">
+              {complete.toLocaleString("he-IL")} מתוך {families.length.toLocaleString("he-IL")}
+            </span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-success" style={{ width: `${pct}%` }} />
+          </div>
         </div>
-        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-          <div className="h-full bg-success" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={async () => {
-          const url = `${publicBaseUrl()}/register${backendKind === "demo" ? "?demo=1" : ""}`;
-          try {
-            await navigator.clipboard.writeText(url);
-            toast.success("קישור טופס ההרשמה להורים הועתק — אפשר להדביק בוואטסאפ / פרסום", { description: url });
-          } catch {
-            toast.info(url);
-          }
-        }}
-        className="mx-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-primary hover:bg-primary-soft"
-      >
-        <Link2 size={16} /> קישור לטופס הרשמה להורים
-      </button>
+      )}
+      {!can.principalOnly && (
+        <button
+          type="button"
+          onClick={async () => {
+            const url = `${publicBaseUrl()}/register${backendKind === "demo" ? "?demo=1" : ""}`;
+            try {
+              await navigator.clipboard.writeText(url);
+              toast.success("קישור טופס ההרשמה להורים הועתק — אפשר להדביק בוואטסאפ / פרסום", { description: url });
+            } catch {
+              toast.info(url);
+            }
+          }}
+          className="mx-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-primary hover:bg-primary-soft"
+        >
+          <Link2 size={16} /> קישור לטופס הרשמה להורים
+        </button>
+      )}
       {profile && (
         <div className="mx-3 px-4 pt-2 text-[11px] text-muted-foreground">
           <span className="font-semibold text-foreground">{profile.full_name || profile.email}</span>
@@ -223,7 +224,7 @@ export const SidebarContent = ({ view, onChange, onNavigate, onOpenSearch }: Pro
 };
 
 export const Sidebar = (props: Props) => (
-  <aside className="hidden lg:flex w-64 shrink-0 border-l border-border flex-col sticky top-0 h-screen">
+  <aside className="hidden lg:flex w-64 shrink-0 border-l border-border flex-col sticky top-0 h-screen print:hidden">
     <SidebarContent {...props} />
   </aside>
 );
