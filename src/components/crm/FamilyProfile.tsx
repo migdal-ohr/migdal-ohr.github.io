@@ -1,3 +1,4 @@
+import type { Family } from "@/types/crm";
 import { useEffect, useState } from "react";
 import { useCan } from "@/lib/session";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -27,6 +28,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { OutcomeChip, TourChip, FullDetailsSection, EventsSection, LogSection, SiblingsSection } from "@/components/crm/card/CardExtras";
 import { formatPhone, buildRemindDocsMessage, buildMeetingReminderMessage, buildRsvpUrl } from "@/lib/whatsapp";
 import { WhatsAppActionButton } from "./WhatsAppActionButton";
 import { StudentAvatar } from "./StudentAvatar";
@@ -63,9 +65,11 @@ interface Props {
   familyId: string | null;
   onClose: () => void;
   onEdit: (id: string) => void;
+  onOpenFamily?: (id: string) => void;
+  onAddSibling?: (prefill: Partial<Family>) => void;
 }
 
-export const FamilyProfile = ({ familyId, onClose, onEdit }: Props) => {
+export const FamilyProfile = ({ familyId, onClose, onEdit, onOpenFamily, onAddSibling }: Props) => {
   const { getFamily, toggleDocument, toggleStation, deleteFamily, setArchived, getAppointment } = useCrm();
   const can = useCan();
   const family = familyId ? getFamily(familyId) : null;
@@ -135,6 +139,8 @@ export const FamilyProfile = ({ familyId, onClose, onEdit }: Props) => {
                     <Chip>{GRADE_LABEL[family.grade]}</Chip>
                     {family.registrationTrack && <Chip>{REGISTRATION_TRACK_LABELS[family.registrationTrack]}</Chip>}
                     <Chip>{STAGE_LABELS[family.stage]}</Chip>
+                    <OutcomeChip family={family} />
+                    <TourChip familyId={family.id} />
                     {family.city && (
                       <Chip>
                         <MapPin size={12} /> {family.city}
@@ -381,6 +387,11 @@ export const FamilyProfile = ({ familyId, onClose, onEdit }: Props) => {
                 })}
               </ul>
             </section>
+
+            <SiblingsSection family={family} onOpenFamily={(id) => onOpenFamily?.(id)} onAddSibling={(p) => onAddSibling?.(p)} />
+            <FullDetailsSection family={family} />
+            <EventsSection family={family} />
+            <LogSection family={family} />
 
             <section>
               <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>

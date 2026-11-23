@@ -55,6 +55,7 @@ const ok = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAIL'}
   // edit
   await page.getByRole('button', { name: 'ערוך' }).click();
   await page.getByText('עריכת פרטי תלמיד').waitFor();
+  await page.getByRole('tab', { name: /רישום ומסמכים/ }).click();
   await page.getByPlaceholder('פרטים נוספים...').fill('הערת בדיקה אוטומטית');
   await page.getByRole('button', { name: 'שמירת שינויים' }).click();
   await page.getByText('הפרטים עודכנו בהצלחה').first().waitFor();
@@ -73,11 +74,12 @@ const ok = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAIL'}
   await page.getByPlaceholder('9 ספרות').fill('123456789');
   ok('bad ID checksum warning', await page.getByText('ספרת הביקורת לא תואמת').isVisible());
   await page.getByPlaceholder('9 ספרות').fill('123456782');
-  await page.getByPlaceholder('לדוגמה: אבי').fill('אבי');
-  await page.locator('input[placeholder="05X-XXXXXXX"]').first().fill('052-9999999');
-  // track select
+  // track select (step 1), then parents (step 2)
   await page.locator('button[role=combobox]').filter({ hasText: 'בחר/י מסלול' }).click();
   await page.getByRole('option', { name: 'מתיבתא' }).click();
+  await page.getByRole('button', { name: 'המשך לשלב הבא' }).click();
+  await page.getByPlaceholder('לדוגמה: אבי').fill('אבי');
+  await page.locator('input[placeholder="05X-XXXXXXX"]:visible').first().fill('052-9999999');
   await page.getByRole('button', { name: 'הוספת תלמיד' }).click();
   await page.getByText('תלמיד/ה חדש/ה נוסף/ה').first().waitFor();
   ok('create student', true);

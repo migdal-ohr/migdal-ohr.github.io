@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { DETAIL_KEYS } from "@/types/crm";
 import type {
   ActivityRow,
   AppointmentRow,
@@ -84,6 +85,7 @@ export interface StudentRow {
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
+  details?: Record<string, unknown> | null;
 }
 
 const u = (v: string | null | undefined) => (v === null || v === undefined || v === "" ? undefined : v);
@@ -99,6 +101,8 @@ export const studentToFamilyRow = (s: StudentRow): FamilyRow => {
     updated_at: s.updated_at,
     rsvp_token: s.rsvp_token,
     data: {
+      // phase-3 card fields live in students.details (camelCase keys)
+      ...(s.details ?? {}),
       firstName: s.first_name,
       lastName: s.last_name,
       studentName: `${s.first_name} ${s.last_name}`.trim(),
@@ -147,9 +151,17 @@ const WRITABLE = new Set([
   "hesitationReason", "photoPath", "source", "rsvpStatus", "isArchived", "schoolYearId",
 ]);
 
+const DETAILS = new Set<string>(DETAIL_KEYS);
+
 const cleanPatch = (p: Record<string, unknown>) => {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(p)) if (WRITABLE.has(k)) out[k] = v === undefined ? null : v;
+  const details: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(p)) {
+    if (WRITABLE.has(k)) out[k] = v === undefined ? null : v;
+    // empty value removes the key on the server
+    else if (DETAILS.has(k)) details[k] = v === undefined || v === "" ? null : v;
+  }
+  if (Object.keys(details).length) out.details = details;
   // legacy "hasConfirmedAttendance" → rsvpStatus
   if (!("rsvpStatus" in out) && typeof p.hasConfirmedAttendance === "boolean" && p.hasConfirmedAttendance) out.rsvpStatus = "confirmed";
   return out;
@@ -194,7 +206,7 @@ export const supabaseBackend: Backend = {
 
   async listAppointments() {
     const rows = await fetchAll<{ id: string; student_id: string; starts_at: string; type: string }>((a, b) =>
-      supabase.from("appointments").select("id, student_id, starts_at, type").order("starts_at", { ascending: true }).range(a, b) as never,
+      supabase.from("appointments").select("id, student_id, starts_at, type").eq("kind", "registration").order("starts_at", { ascending: true }).range(a, b) as never,
     );
     return rows.map(apptRow);
   },
@@ -382,7 +394,10 @@ export const supabaseBackend: Backend = {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments" }, (p) => {
         const evt = p.eventType as "INSERT" | "UPDATE" | "DELETE";
-        const old = p.old as { student_id?: string; id?: string };
+        const old = p.old as { student_id?: string; id?: string; kind?: string };
+        // the store tracks only the registration meeting; tours/interviews live in the calendar
+        const kind = (p.new as { kind?: string })?.kind ?? old?.kind;
+        if (kind && kind !== "registration") return;
         h.appointment?.(
           evt,
           evt === "DELETE" ? null : apptRow(p.new as { id: string; student_id: string; starts_at: string; type: string }),

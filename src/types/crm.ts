@@ -63,23 +63,67 @@ export const REGISTRATION_TRACK_BADGE: Record<RegistrationTrack, string> = {
 
 /* ---------- Family selection fields (drive dynamic doc list) ---------- */
 
-export type FamilyStatus = "married" | "divorced" | "single" | "widowed";
+export type FamilyStatus = "married" | "divorced" | "separated" | "single" | "single_father" | "widowed" | "unknown";
 export const FAMILY_STATUS_LABELS: Record<FamilyStatus, string> = {
   married: "נשואים",
   divorced: "גרושים",
-  single: "הורה יחידני",
-  widowed: "אלמנ/ה",
+  separated: "פרודים",
+  single: "חד הורית",
+  single_father: "חד הורי",
+  widowed: "אלמן/ה",
+  unknown: "לא ידוע",
 };
-export const FAMILY_STATUS_ORDER: FamilyStatus[] = ["married", "divorced", "single", "widowed"];
+export const FAMILY_STATUS_ORDER: FamilyStatus[] = ["married", "divorced", "separated", "single", "single_father", "widowed", "unknown"];
 
-export type Employment = "salaried" | "self_employed" | "unemployed" | "na";
+export type Employment = "salaried" | "self_employed" | "unemployed" | "housewife" | "pensioner" | "other" | "na";
 export const EMPLOYMENT_LABELS: Record<Employment, string> = {
-  salaried: "שכיר",
-  self_employed: "עצמאי",
-  unemployed: "לא עובד",
+  salaried: "שכיר/ה",
+  self_employed: "עצמאי/ת",
+  unemployed: "לא עובד/ת",
+  housewife: "עקרת בית",
+  pensioner: "פנסיונר/ית",
+  other: "אחר",
   na: "לא רלוונטי",
 };
-export const EMPLOYMENT_ORDER: Employment[] = ["salaried", "self_employed", "unemployed", "na"];
+export const EMPLOYMENT_ORDER: Employment[] = ["salaried", "self_employed", "unemployed", "pensioner", "other", "na"];
+export const MOTHER_EMPLOYMENT_ORDER: Employment[] = ["salaried", "self_employed", "unemployed", "housewife", "pensioner", "other", "na"];
+
+/* ---------- Phase 3: extra student-card fields (stored in students.details) ---------- */
+
+export type Outcome = "in_process" | "accepted" | "rejected" | "not_suitable" | "studying" | "left";
+export const OUTCOME_LABELS: Record<Outcome, string> = {
+  in_process: "בתהליך",
+  accepted: "התקבל",
+  rejected: "לא התקבל",
+  not_suitable: "לא מתאים",
+  studying: "לומד",
+  left: "עזב",
+};
+export const OUTCOME_ORDER: Outcome[] = ["in_process", "accepted", "rejected", "not_suitable", "studying", "left"];
+export const OUTCOME_BADGE: Record<Outcome, string> = {
+  in_process: "bg-muted text-muted-foreground",
+  accepted: "bg-emerald-100 text-emerald-800",
+  rejected: "bg-rose-100 text-rose-800",
+  not_suitable: "bg-orange-100 text-orange-800",
+  studying: "bg-sky-100 text-sky-800",
+  left: "bg-zinc-200 text-zinc-700",
+};
+
+export const HMO_LABELS: Record<string, string> = { clalit: "כללית", maccabi: "מכבי", meuhedet: "מאוחדת", leumit: "לאומית" };
+export const RELIGIOUS_LABELS: Record<string, string> = { haredi: "חרדי", dati_leumi: "דתי לאומי", mitchazek: "מתחזק", lo_dati: "לא דתי" };
+export const GENDER_LABELS: Record<string, string> = { m: "זכר", f: "נקבה" };
+export const CAMP_LABELS: Record<string, string> = { coming: "מגיע", not_coming: "לא מגיע" };
+
+/** Keys stored in students.details (merged key-by-key on the server). */
+export const DETAIL_KEYS = [
+  "gender", "address", "zip", "mailAddress", "email", "homePhone", "studentMobile", "birthCountry", "aliyahDate", "hmo", "religious",
+  "fatherIdNumber", "fatherBirthYear", "fatherSchoolYears", "fatherAddress", "fatherCity", "fatherWhatsapp",
+  "motherIdNumber", "motherBirthYear", "motherSchoolYears", "motherAddress", "motherCity", "motherWhatsapp", "motherAvrech",
+  "siblingsCount", "prevCity", "prevSchool", "prevSchoolSymbol", "prevGrade",
+  "recruiterId", "outcome", "startDate", "endDate", "campStatus", "familyGroup",
+] as const;
+export type DetailKey = (typeof DETAIL_KEYS)[number];
+export type StudentDetails = Partial<Record<DetailKey, string | number | boolean | null>>;
 
 /* ---------- Documents (dynamic) ---------- */
 
@@ -216,6 +260,42 @@ export interface Family {
   /** Secret token used in the parent RSVP link (from families.rsvp_token). */
   rsvpToken?: string;
   createdAt: string;
+  // phase 3 details (see DETAIL_KEYS)
+  gender?: string;
+  address?: string;
+  zip?: string;
+  mailAddress?: string;
+  email?: string;
+  homePhone?: string;
+  studentMobile?: string;
+  birthCountry?: string;
+  aliyahDate?: string;
+  birthDate?: string;
+  hmo?: string;
+  religious?: string;
+  fatherIdNumber?: string;
+  fatherBirthYear?: number;
+  fatherSchoolYears?: number;
+  fatherAddress?: string;
+  fatherCity?: string;
+  fatherWhatsapp?: boolean;
+  motherIdNumber?: string;
+  motherBirthYear?: number;
+  motherSchoolYears?: number;
+  motherAddress?: string;
+  motherCity?: string;
+  motherWhatsapp?: boolean;
+  siblingsCount?: number;
+  prevCity?: string;
+  prevSchool?: string;
+  prevSchoolSymbol?: string;
+  prevGrade?: string;
+  recruiterId?: string;
+  outcome?: Outcome;
+  startDate?: string;
+  endDate?: string;
+  campStatus?: string;
+  familyGroup?: string;
   /** Last DB update timestamp (from row.updated_at). Used for persuasion staleness. */
   updatedAt?: string;
 }
@@ -231,6 +311,32 @@ export interface Appointment {
   familyId: string;
   date: string;
   type: string;
+}
+
+export type EventKind = "registration" | "tour" | "interview" | "registration_day" | "other";
+export const EVENT_KIND_LABELS: Record<EventKind, string> = {
+  registration: "פגישת רישום",
+  tour: "סיור",
+  interview: "ראיון",
+  registration_day: "יום רישום",
+  other: "אחר",
+};
+export const EVENT_KIND_COLOR: Record<EventKind, string> = {
+  registration: "bg-primary/10 text-primary border-primary/30",
+  tour: "bg-emerald-50 text-emerald-800 border-emerald-200",
+  interview: "bg-violet-50 text-violet-800 border-violet-200",
+  registration_day: "bg-amber-50 text-amber-800 border-amber-200",
+  other: "bg-muted text-foreground border-border",
+};
+/** Every calendar event (registration meeting, tour, interview…). */
+export interface CalendarEvent {
+  id: string;
+  familyId: string;
+  kind: EventKind;
+  date: string;
+  type: string;
+  attended: boolean | null;
+  notes?: string | null;
 }
 
 /** Dot colour per stage (used by board, table, stats). */

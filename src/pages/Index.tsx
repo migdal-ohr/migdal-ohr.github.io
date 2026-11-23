@@ -16,6 +16,8 @@ const RequestsView = lazy(() => import("@/components/crm/RequestsView").then((m)
 const StatsView = lazy(() => import("@/components/crm/StatsView").then((m) => ({ default: m.StatsView })));
 import { FamilyProfile } from "@/components/crm/FamilyProfile";
 import { StudentForm } from "@/components/crm/StudentForm";
+import { MentionAlerts } from "@/components/crm/card/CardExtras";
+import type { Family } from "@/types/crm";
 import { CommandPalette } from "@/components/crm/CommandPalette";
 import { RsvpToastListener } from "@/components/crm/RsvpToastListener";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -34,6 +36,7 @@ const Shell = () => {
   const [familyId, setFamilyId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<Partial<Family> | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { getFamily, loading, error, reload, backendKind } = useCrm();
@@ -69,12 +72,14 @@ const Shell = () => {
 
   const can = useSession().can;
   const openCreate = useCallback(() => {
-    if (!can.edit) return;
+    if (!can.add) return;
     setEditId(null);
+    setPrefill(null);
     setFormOpen(true);
-  }, [can.edit]);
+  }, [can.add]);
   const openEdit = (id: string) => {
     if (!can.edit) return;
+    setPrefill(null);
     setFamilyId(null);
     setEditId(id);
     setFormOpen(true);
@@ -147,8 +152,20 @@ const Shell = () => {
           )}
         </main>
       </div>
-      <FamilyProfile familyId={familyId} onClose={() => setFamilyId(null)} onEdit={openEdit} />
-      <StudentForm open={formOpen} onClose={() => setFormOpen(false)} family={editId ? getFamily(editId) : null} onOpenFamily={openFamily} />
+      <FamilyProfile
+        familyId={familyId}
+        onClose={() => setFamilyId(null)}
+        onEdit={openEdit}
+        onOpenFamily={openFamily}
+        onAddSibling={(p) => {
+          setFamilyId(null);
+          setEditId(null);
+          setPrefill(p);
+          setFormOpen(true);
+        }}
+      />
+      <StudentForm open={formOpen} onClose={() => setFormOpen(false)} family={editId ? getFamily(editId) : null} onOpenFamily={openFamily} prefill={prefill} />
+      <MentionAlerts onOpenFamily={openFamily} />
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}

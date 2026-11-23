@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+import { StudentExtraFields, ParentsExtraFields, RegistrationExtraFields, DetailsState } from "@/components/crm/form/ExtraFields";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCan } from "@/lib/session";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -37,6 +39,9 @@ import {
   FamilyStatus,
   EMPLOYMENT_LABELS,
   EMPLOYMENT_ORDER,
+  MOTHER_EMPLOYMENT_ORDER,
+  DETAIL_KEYS,
+  StudentDetails,
   Employment,
   OPTIONAL_DOCS,
   getRequiredDocuments,
@@ -58,6 +63,8 @@ interface Props {
   onClose: () => void;
   family?: Family | null;
   onOpenFamily?: (id: string) => void;
+  /** "Add sibling": new student pre-filled with the family's details */
+  prefill?: Partial<Family> | null;
 }
 
 const empty = {
@@ -86,7 +93,9 @@ const empty = {
 
 const GRADES = (Object.keys(GRADE_LABEL).map(Number) as Grade[]).sort((a, b) => a - b);
 
-export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
+const STEPS = ["התלמיד", "ההורים והמשפחה", "רישום ומסמכים"];
+
+export const StudentForm = ({ open, onClose, family, onOpenFamily, prefill }: Props) => {
   const { addFamily, updateFamily, deleteFamily, getAppointment, scheduleAppointment, allFamilies } = useCrm();
   const can = useCan();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -99,6 +108,10 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
   const [removePhoto, setRemovePhoto] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [step, setStep] = useState(0);
+  const [details, setDetails] = useState<DetailsState>({});
+  const [birthDate, setBirthDate] = useState("");
+  const setD = (k: keyof StudentDetails, v: StudentDetails[keyof StudentDetails]) => setDetails((p) => ({ ...p, [k]: v }));
   const isEdit = !!family;
 
   useEffect(() => {
@@ -107,6 +120,9 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
     setPhotoPreview(null);
     setRemovePhoto(false);
     setSaving(false);
+    setStep(0);
+    setDetails(family ? (Object.fromEntries(DETAIL_KEYS.filter((k) => (family as unknown as Record<string, unknown>)[k] != null).map((k) => [k, (family as unknown as Record<string, unknown>)[k]])) as DetailsState) : ((prefill ? Object.fromEntries(DETAIL_KEYS.filter((k) => (prefill as Record<string, unknown>)[k] != null).map((k) => [k, (prefill as Record<string, unknown>)[k]])) : {}) as DetailsState));
+    setBirthDate(family?.birthDate ?? "");
     if (family) {
       setForm({
         firstName: family.firstName ?? "",
@@ -136,6 +152,24 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
       setMeetingDate(parts.date);
       setMeetingTime(parts.time);
       setInitialMeeting(appt?.date ?? null);
+    } else if (prefill) {
+      setForm({
+        ...empty,
+        lastName: prefill.lastName ?? "",
+        city: prefill.city ?? "",
+        fatherName: prefill.fatherName ?? "",
+        motherName: prefill.motherName ?? "",
+        fatherPhone: prefill.fatherPhone ?? "",
+        motherPhone: prefill.motherPhone ?? "",
+        familyStatus: prefill.familyStatus ?? "married",
+        fatherEmployment: prefill.fatherEmployment ?? "na",
+        motherEmployment: prefill.motherEmployment ?? "na",
+        fatherAvrech: !!prefill.fatherAvrech,
+        registrationTrack: prefill.registrationTrack ?? "",
+      });
+      setMeetingDate("");
+      setMeetingTime("");
+      setInitialMeeting(null);
     } else {
       setForm(empty);
       setMeetingDate("");
@@ -203,17 +237,17 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
     const motherName = form.motherName.trim();
     const fatherPhone = form.fatherPhone.trim();
     const motherPhone = form.motherPhone.trim();
-    if (!firstName) return toast({ title: "יש להזין שם פרטי", variant: "destructive" });
-    if (!lastName) return toast({ title: "יש להזין שם משפחה", variant: "destructive" });
-    if (!fatherName && !motherName) return toast({ title: "יש להזין שם אבא או אמא לפחות", variant: "destructive" });
-    if (!fatherPhone && !motherPhone) return toast({ title: "יש להזין מספר טלפון אחד לפחות", variant: "destructive" });
+    if (!firstName) return (setStep(0), toast({ title: "יש להזין שם פרטי", variant: "destructive" }));
+    if (!lastName) return (setStep(0), toast({ title: "יש להזין שם משפחה", variant: "destructive" }));
+    if (!fatherName && !motherName) return (setStep(1), toast({ title: "יש להזין שם אבא או אמא לפחות", variant: "destructive" }));
+    if (!fatherPhone && !motherPhone) return (setStep(1), toast({ title: "יש להזין מספר טלפון אחד לפחות", variant: "destructive" }));
     if (fatherPhone && !isValidIsraeliPhone(fatherPhone))
-      return toast({ title: "טלפון אבא לא תקין", description: "פורמט: 05X-XXXXXXX", variant: "destructive" });
+      return setStep(1), toast({ title: "טלפון אבא לא תקין", description: "פורמט: 05X-XXXXXXX", variant: "destructive" });
     if (motherPhone && !isValidIsraeliPhone(motherPhone))
-      return toast({ title: "טלפון אמא לא תקין", description: "פורמט: 05X-XXXXXXX", variant: "destructive" });
+      return setStep(1), toast({ title: "טלפון אמא לא תקין", description: "פורמט: 05X-XXXXXXX", variant: "destructive" });
     if (form.studentId.trim() && !/^\d{5,9}$/.test(form.studentId.trim()))
       return toast({ title: "תעודת זהות לא תקינה", variant: "destructive" });
-    if (!form.registrationTrack) return toast({ title: "יש לבחור מסלול רישום", variant: "destructive" });
+    if (!form.registrationTrack) return (setStep(0), toast({ title: "יש לבחור מסלול רישום", variant: "destructive" }));
     if ((meetingDate && !meetingTime) || (!meetingDate && meetingTime))
       return toast({ title: "לקביעת פגישה יש להזין גם תאריך וגם שעה", variant: "destructive" });
 
@@ -246,6 +280,8 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
       optionalDocs: form.optionalDocs,
       documents: cleanedDocs,
       stations: form.stations,
+      birthDate: birthDate || undefined,
+      ...(Object.fromEntries(DETAIL_KEYS.map((k) => [k, details[k] === "" ? undefined : details[k] ?? undefined])) as Partial<Family>),
     };
     if (removePhoto) {
       payload.photoPath = undefined;
@@ -295,6 +331,25 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
         </DialogHeader>
 
         <form onSubmit={submit} className="space-y-5 pt-2">
+          <div className="flex gap-1 rounded-xl bg-muted p-1" role="tablist" aria-label="שלבי הטופס">
+            {STEPS.map((t, i) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={step === i}
+                onClick={() => setStep(i)}
+                className={cn(
+                  "flex-1 rounded-lg px-2 py-1.5 text-sm font-medium transition",
+                  step === i ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <span className="me-1 text-xs opacity-60">{i + 1}.</span>
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className={cn("space-y-5", step !== 0 && "hidden")}>
           {/* Photo */}
           <div className="flex items-center gap-4">
             {photoPreview ? (
@@ -424,6 +479,12 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
                 </SelectContent>
               </Select>
             </Field>
+          </div>
+          <StudentExtraFields d={details} setD={setD} birthDate={birthDate} setBirthDate={setBirthDate} />
+          </div>
+
+          <div className={cn("space-y-5", step !== 1 && "hidden")}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="שם אבא">
               <Input value={form.fatherName} onChange={(e) => set("fatherName", e.target.value)} placeholder="לדוגמה: אבי" />
             </Field>
@@ -437,33 +498,6 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
               <Input value={form.motherPhone} onChange={(e) => set("motherPhone", e.target.value)} placeholder="05X-XXXXXXX" dir="ltr" inputMode="tel" />
             </Field>
           </div>
-
-          <Field label="סטטוס רישום">
-            <Select value={form.stage} onValueChange={(v) => set("stage", v as Stage)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STAGE_ORDER.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {STAGE_LABELS[s]}
-                  </SelectItem>
-                ))}
-                <SelectItem value="persuasion">{STAGE_LABELS.persuasion}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-
-          {form.stage === "persuasion" && (
-            <Field label="סיבת ההיסוס / ביטול">
-              <Textarea
-                value={form.hesitationReason}
-                onChange={(e) => set("hesitationReason", e.target.value)}
-                rows={3}
-                placeholder="לדוגמה: מתלבטים בין מוסדות, בעיות תקציב, ממתינים לתשובה מאחיו..."
-              />
-            </Field>
-          )}
 
           <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-4">
             <Label className="font-semibold block">מצב משפחתי ותעסוקה</Label>
@@ -506,7 +540,7 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {EMPLOYMENT_ORDER.map((e) => (
+                    {MOTHER_EMPLOYMENT_ORDER.map((e) => (
                       <SelectItem key={e} value={e}>
                         {EMPLOYMENT_LABELS[e]}
                       </SelectItem>
@@ -516,6 +550,39 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
               </Field>
             </div>
           </div>
+
+          <ParentsExtraFields d={details} setD={setD} studentCity={form.city} />
+          </div>
+
+          <div className={cn("space-y-5", step !== 2 && "hidden")}>
+          <Field label="סטטוס רישום">
+            <Select value={form.stage} onValueChange={(v) => set("stage", v as Stage)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STAGE_ORDER.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STAGE_LABELS[s]}
+                  </SelectItem>
+                ))}
+                <SelectItem value="persuasion">{STAGE_LABELS.persuasion}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
+          {form.stage === "persuasion" && (
+            <Field label="סיבת ההיסוס / ביטול">
+              <Textarea
+                value={form.hesitationReason}
+                onChange={(e) => set("hesitationReason", e.target.value)}
+                rows={3}
+                placeholder="לדוגמה: מתלבטים בין מוסדות, בעיות תקציב, ממתינים לתשובה מאחיו..."
+              />
+            </Field>
+          )}
+
+          <RegistrationExtraFields d={details} setD={setD} />
 
           <div className="rounded-xl border border-border bg-muted/30 p-4">
             <Label className="mb-3 block font-semibold">פגישת רישום</Label>
@@ -660,9 +727,21 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily }: Props) => {
             <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} placeholder="פרטים נוספים..." />
           </Field>
 
+          </div>
+
           <div className="flex items-center justify-between gap-2 pt-2 border-t sticky bottom-0 bg-background pb-1">
             <div className="flex gap-2">
-              <Button type="submit" disabled={saving}>
+              {step > 0 && (
+                <Button type="button" variant="outline" onClick={() => setStep(step - 1)}>
+                  הקודם
+                </Button>
+              )}
+              {step < STEPS.length - 1 && (
+                <Button type="button" variant={isEdit ? "outline" : "default"} onClick={() => setStep(step + 1)}>
+                  המשך לשלב הבא
+                </Button>
+              )}
+              <Button type="submit" disabled={saving} variant={!isEdit && step < STEPS.length - 1 ? "outline" : "default"}>
                 {saving && <Loader2 className="animate-spin" />}
                 {isEdit ? "שמירת שינויים" : "הוספת תלמיד"}
               </Button>
