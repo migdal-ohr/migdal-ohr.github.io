@@ -39,7 +39,7 @@ const ok = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAIL'}
   ok('bulk bar appears', await page.getByText(/נבחרו/).isVisible());
   await page.getByRole('button', { name: 'ביטול בחירה' }).click();
   // filter missing docs
-  await page.locator('button[role=combobox]').filter({ hasText: 'מסמכים' }).click();
+  await page.locator('button[role=combobox]').filter({ hasText: 'מסמכים' }).first().click();
   await page.getByRole('option', { name: 'חסרים מסמכים' }).click();
   await page.waitForTimeout(200);
   ok('docs filter applied', await page.getByText(/נקה 1 סינונים/).isVisible());
@@ -119,7 +119,7 @@ const ok = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAIL'}
 
   // calendar
   await page.getByRole('button', { name: /לוח שנה/ }).first().click();
-  await page.getByText('פגישות החודש').waitFor();
+  await page.getByText(/\d+ אירועים/).first().waitFor();
   await page.screenshot({ path: `${SHOTS}/09-calendar.png` });
   // RTL check: first day-of-month cell column matches weekday
   ok('calendar renders', true);

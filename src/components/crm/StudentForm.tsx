@@ -43,7 +43,7 @@ import {
   DETAIL_KEYS,
   StudentDetails,
   Employment,
-  OPTIONAL_DOCS,
+  getOptionalDocs,
   getRequiredDocuments,
   RegistrationTrack,
   REGISTRATION_TRACK_LABELS,
@@ -188,7 +188,7 @@ export const StudentForm = ({ open, onClose, family, onOpenFamily, prefill }: Pr
     [form.familyStatus, form.fatherEmployment, form.motherEmployment, form.fatherAvrech, form.optionalDocs],
   );
   const docsReceived = requiredDocs.filter((d) => form.documents[d.key]).length;
-  const availableOptional = OPTIONAL_DOCS.filter((d) => !form.optionalDocs.includes(d.key));
+  const availableOptional = getOptionalDocs().filter((d) => !form.optionalDocs.includes(d.key));
 
   /* ---------- live duplicate detection ---------- */
   const duplicates = useMemo(() => {

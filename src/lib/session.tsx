@@ -5,6 +5,7 @@ import { setSchoolYearScope } from "@/lib/api/supabaseBackend";
 import { setInstitutionSettings, InstitutionSettings, DEFAULT_INSTITUTION } from "@/lib/whatsapp";
 
 import type { RoleRow } from "@/lib/permissions";
+import { setDocsCatalog, setInstitutionNames, type CatalogDoc } from "@/types/crm";
 
 /** Built-in role keys (custom roles have key null → "custom"). */
 export type Role = "admin" | "manager" | "secretary" | "interviewer" | "viewer" | "custom";
@@ -155,7 +156,13 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
 
   const reloadSettings = useCallback(async () => {
     if (demo) return;
-    const { data } = await supabase.from("app_settings").select("value").eq("key", "institution").maybeSingle();
+    const [{ data: rows }, { data: insts }] = await Promise.all([
+      supabase.from("app_settings").select("key, value").in("key", ["institution", "documents_catalog"]),
+      supabase.from("institutions").select("key, name, is_active, sort"),
+    ]);
+    setInstitutionNames((insts as { key: string; name: string; is_active: boolean; sort: number }[]) ?? []);
+    const data = rows?.find((r) => r.key === "institution");
+    setDocsCatalog((rows?.find((r) => r.key === "documents_catalog")?.value as CatalogDoc[] | undefined) ?? null);
     const s = { ...DEFAULT_INSTITUTION, ...((data?.value as Partial<InstitutionSettings>) ?? {}) };
     setSettings(s);
     setInstitutionSettings(s);
@@ -193,6 +200,7 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
       .channel(`me-${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "roles" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "institutions" }, () => reloadSettings())
       .on("postgres_changes", { event: "*", schema: "public", table: "school_years" }, () => reloadYears())
       .subscribe();
     return () => {

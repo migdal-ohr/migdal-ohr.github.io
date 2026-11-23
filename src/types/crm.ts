@@ -42,7 +42,7 @@ export const composeParentNames = (fatherName?: string, motherName?: string, fal
 
 export type RegistrationTrack = "metivta" | "yeshiva_ketana" | "maor_israel";
 
-export const REGISTRATION_TRACK_LABELS: Record<RegistrationTrack, string> = {
+export const REGISTRATION_TRACK_LABELS: Record<string, string> = {
   metivta: "מתיבתא",
   yeshiva_ketana: "ישיבה קטנה",
   maor_israel: "מאור ישראל",
@@ -55,7 +55,7 @@ export const REGISTRATION_TRACK_ORDER: RegistrationTrack[] = [
 ];
 
 /** Tailwind classes for the prominent track badge */
-export const REGISTRATION_TRACK_BADGE: Record<RegistrationTrack, string> = {
+export const REGISTRATION_TRACK_BADGE: Record<string, string> = {
   metivta: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-200 dark:border-blue-700",
   yeshiva_ketana: "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/40 dark:text-emerald-200 dark:border-emerald-700",
   maor_israel: "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/40 dark:text-amber-100 dark:border-amber-700",
@@ -132,19 +132,38 @@ export interface RequiredDoc {
   label: string;
 }
 
+/** Document catalog: editable by admins (app_settings.documents_catalog). Keys are never removed, only switched off. */
+export type DocMode = "always" | "optional" | "off";
+export interface CatalogDoc extends RequiredDoc {
+  mode: DocMode;
+}
+export const DEFAULT_DOCS_CATALOG: CatalogDoc[] = [
+  { key: "id_card", label: "צילום תעודת זהות", mode: "always" },
+  { key: "medical_summary", label: "סיכום מידע רפואי", mode: "always" },
+  { key: "school_cert", label: 'תעודת ביה"ס', mode: "always" },
+  { key: "bank_statements", label: 'תדפיסי עו"ש', mode: "always" },
+  { key: "opt_diagnostics", label: "אבחונים", mode: "optional" },
+  { key: "opt_eligibility", label: "ועדת זכאות ואיפיון", mode: "optional" },
+  { key: "opt_residence", label: "אישור מגורים", mode: "optional" },
+  { key: "opt_confidentiality", label: "ויתור סודיות", mode: "optional" },
+  { key: "opt_standing_order", label: "הוראת קבע", mode: "optional" },
+];
+let docsCatalog: CatalogDoc[] = DEFAULT_DOCS_CATALOG;
+/** Merge the saved catalog with the defaults (new default docs appear automatically). */
+export const setDocsCatalog = (saved?: CatalogDoc[] | null) => {
+  const list = Array.isArray(saved) ? saved.filter((d) => d && d.key && d.label) : [];
+  const keys = new Set(list.map((d) => d.key));
+  docsCatalog = [...list, ...DEFAULT_DOCS_CATALOG.filter((d) => !keys.has(d.key))];
+};
+export const getDocsCatalog = () => docsCatalog;
 /** Always-required documents */
-export const FIXED_DOCS: RequiredDoc[] = [
-  { key: "id_card", label: "צילום תעודת זהות" },
-  { key: "medical_summary", label: "סיכום מידע רפואי" },
-  { key: "school_cert", label: 'תעודת ביה"ס' },
-  { key: "bank_statements", label: 'תדפיסי עו"ש' },
-];
-
+export const getFixedDocs = (): RequiredDoc[] => docsCatalog.filter((d) => d.mode === "always");
 /** Optional docs (added manually via "הוסף מסמך ייעודי") */
-export const OPTIONAL_DOCS: RequiredDoc[] = [
-  { key: "opt_diagnostics", label: "אבחונים" },
-  { key: "opt_eligibility", label: "ועדת זכאות ואיפיון" },
-];
+export const getOptionalDocs = (): RequiredDoc[] => docsCatalog.filter((d) => d.mode === "optional");
+/** @deprecated use getFixedDocs() */
+export const FIXED_DOCS: RequiredDoc[] = DEFAULT_DOCS_CATALOG.filter((d) => d.mode === "always");
+/** @deprecated use getOptionalDocs() */
+export const OPTIONAL_DOCS: RequiredDoc[] = DEFAULT_DOCS_CATALOG.filter((d) => d.mode === "optional");
 
 const employmentDocs = (parent: "father" | "mother", emp: Employment, avrech: boolean): RequiredDoc[] => {
   const p = parent === "father" ? "אבא" : "אמא";
@@ -168,7 +187,7 @@ export const getRequiredDocuments = (f: {
   motherAvrech?: boolean;
   optionalDocs?: string[];
 }): RequiredDoc[] => {
-  const list: RequiredDoc[] = [...FIXED_DOCS];
+  const list: RequiredDoc[] = [...getFixedDocs()];
   if (f.familyStatus === "divorced") {
     list.push({ key: "divorce_agreement", label: "הסכם גירושין" });
   }
@@ -176,8 +195,8 @@ export const getRequiredDocuments = (f: {
   list.push(...employmentDocs("mother", f.motherEmployment ?? "na", false));
   // Optional docs the user explicitly added
   for (const k of f.optionalDocs ?? []) {
-    const def = OPTIONAL_DOCS.find((d) => d.key === k);
-    if (def) list.push(def);
+    const def = docsCatalog.find((d) => d.key === k && d.mode !== "off");
+    if (def && !list.some((x) => x.key === def.key)) list.push(def);
   }
   return list;
 };
@@ -357,7 +376,7 @@ export const STAGE_HEX: Record<Stage, string> = {
   persuasion: "#f472b6",
 };
 
-export const TRACK_HEX: Record<RegistrationTrack, string> = {
+export const TRACK_HEX: Record<string, string> = {
   metivta: "#3b82f6",
   yeshiva_ketana: "#10b981",
   maor_israel: "#f59e0b",
@@ -369,3 +388,24 @@ export const getMissingDocuments = (f: Family): RequiredDoc[] =>
 
 export const stationsDoneCount = (f: Family): number =>
   STATION_ORDER.filter((k) => f.stations?.[k]).length;
+
+/* ---------- Institutions (tracks) are a managed list; keep the label maps in sync ---------- */
+const EXTRA_BADGES = [
+  "bg-rose-100 text-rose-800 border-rose-300",
+  "bg-violet-100 text-violet-800 border-violet-300",
+  "bg-cyan-100 text-cyan-800 border-cyan-300",
+  "bg-lime-100 text-lime-800 border-lime-300",
+];
+const EXTRA_HEX = ["#f43f5e", "#8b5cf6", "#06b6d4", "#84cc16"];
+/** Called once the institutions table is loaded: new institutions get labels, colours and a place in the order. */
+export const setInstitutionNames = (list: { key: string; name: string; is_active: boolean; sort: number }[]) => {
+  if (!list.length) return;
+  let extra = 0;
+  for (const i of list) {
+    REGISTRATION_TRACK_LABELS[i.key] = i.name;
+    if (!REGISTRATION_TRACK_BADGE[i.key]) REGISTRATION_TRACK_BADGE[i.key] = EXTRA_BADGES[extra % EXTRA_BADGES.length];
+    if (!TRACK_HEX[i.key]) TRACK_HEX[i.key] = EXTRA_HEX[extra++ % EXTRA_HEX.length];
+  }
+  const active = [...list].filter((i) => i.is_active).sort((a, b) => a.sort - b.sort).map((i) => i.key as RegistrationTrack);
+  REGISTRATION_TRACK_ORDER.splice(0, REGISTRATION_TRACK_ORDER.length, ...active);
+};

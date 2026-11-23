@@ -1,3 +1,4 @@
+import { useRecruiters } from "@/lib/api/extras";
 import { useEffect, useMemo, useState } from "react";
 import { useCan } from "@/lib/session";
 import { useCrm } from "@/store/crmStore";
@@ -9,6 +10,9 @@ import {
   REGISTRATION_TRACK_LABELS,
   RegistrationTrack,
   STAGE_DOT,
+  OUTCOME_LABELS,
+  OUTCOME_ORDER,
+  OUTCOME_BADGE,
   STAGE_LABELS,
   STAGE_ORDER,
   Stage,
@@ -93,6 +97,9 @@ export const StudentsTable = ({ onOpenFamily, onAddStudent, preset }: Props) => 
   const [docs, setDocs] = useState<DocsFilter>(preset?.docs ?? saved.docs ?? "all");
   const [meeting, setMeeting] = useState<MeetingFilter>(preset?.meeting ?? saved.meeting ?? "all");
   const [rsvp, setRsvp] = useState<RsvpFilter>(saved.rsvp ?? "all");
+  const [outcome, setOutcome] = useState<string>(saved.outcome ?? "all");
+  const [recruiter, setRecruiter] = useState<string>(saved.recruiter ?? "all");
+  const { recruiters } = useRecruiters();
   const [showArchived, setShowArchived] = useState<boolean>(saved.showArchived ?? false);
   const [sortKey, setSortKey] = useState<SortKey>(saved.sortKey ?? "updated");
   const [sortDir, setSortDir] = useState<"asc" | "desc">(saved.sortDir ?? "desc");
@@ -106,12 +113,12 @@ export const StudentsTable = ({ onOpenFamily, onAddStudent, preset }: Props) => 
     try {
       sessionStorage.setItem(
         SS_KEY,
-        JSON.stringify({ search, track, stage, grade, city, docs, meeting, rsvp, showArchived, sortKey, sortDir, pageSize }),
+        JSON.stringify({ search, track, stage, grade, city, docs, meeting, rsvp, outcome, recruiter, showArchived, sortKey, sortDir, pageSize }),
       );
     } catch {
       /* ignore */
     }
-  }, [search, track, stage, grade, city, docs, meeting, rsvp, showArchived, sortKey, sortDir, pageSize]);
+  }, [search, track, stage, grade, city, docs, meeting, rsvp, outcome, recruiter, showArchived, sortKey, sortDir, pageSize]);
 
   const source = showArchived ? archivedFamilies : families;
 
@@ -139,6 +146,8 @@ export const StudentsTable = ({ onOpenFamily, onAddStudent, preset }: Props) => 
       if (grade !== "all" && String(f.grade) !== grade) return false;
       if (city !== "all" && (f.city ?? "").trim() !== city) return false;
       if (rsvp !== "all" && (f.rsvpStatus ?? "pending") !== rsvp) return false;
+      if (outcome !== "all" && (f.outcome ?? "in_process") !== outcome) return false;
+      if (recruiter !== "all" && (recruiter === "none" ? !!f.recruiterId : f.recruiterId !== recruiter)) return false;
       const ds = docStats.get(f.id)!;
       if (docs === "missing" && ds.done >= ds.total) return false;
       if (docs === "complete" && ds.done < ds.total) return false;
@@ -153,7 +162,7 @@ export const StudentsTable = ({ onOpenFamily, onAddStudent, preset }: Props) => 
       }
       return true;
     });
-  }, [source, search, track, stage, grade, city, rsvp, docs, meeting, docStats, getAppointment]);
+  }, [source, search, track, stage, grade, city, rsvp, outcome, recruiter, docs, meeting, docStats, getAppointment]);
 
   const sorted = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
@@ -295,6 +304,15 @@ export const StudentsTable = ({ onOpenFamily, onAddStudent, preset }: Props) => 
         <div className="flex flex-wrap gap-2 items-center">
           <Filter size={16} className="text-muted-foreground" />
           <FilterSelect value={stage} onChange={(v) => setStage(v as Stage | "all")} label="סטטוס" options={STAGES.map((s) => [s, STAGE_LABELS[s]])} />
+          <FilterSelect value={outcome} onChange={setOutcome} label="החלטה" options={OUTCOME_ORDER.map((o) => [o, OUTCOME_LABELS[o]])} />
+          {recruiters.length > 0 && (
+            <FilterSelect
+              value={recruiter}
+              onChange={setRecruiter}
+              label="פעיל"
+              options={[["none", "ללא פעיל"], ...recruiters.map((r) => [r.id, r.name] as [string, string])]}
+            />
+          )}
           <FilterSelect value={grade} onChange={setGrade} label="כיתה" options={GRADES.map((g) => [String(g), GRADE_LABEL[g]])} />
           <FilterSelect value={city} onChange={setCity} label="עיר" options={cities.map(([c, n]) => [c, `${c} (${n})`])} />
           <FilterSelect
@@ -475,11 +493,36 @@ export const StudentsTable = ({ onOpenFamily, onAddStudent, preset }: Props) => 
                         </span>
                       )}
                     </td>
-                    <td className="px-3 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className={cn("size-2 rounded-full", STAGE_DOT[f.stage])} />
-                        {STAGE_LABELS[f.stage]}
-                      </span>
+                    <td className="px-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {can.status && !showArchived ? (
+                        <Select
+                          value={f.stage}
+                          onValueChange={async (v) => {
+                            await bulkUpdateStage([f.id], v as Stage);
+                            toast.success(`${f.studentName}: ${STAGE_LABELS[v as Stage]}`);
+                          }}
+                        >
+                          <SelectTrigger className="h-7 w-auto gap-1.5 border-transparent bg-transparent px-1.5 hover:border-border" aria-label={`סטטוס של ${f.studentName}`}>
+                            <span className={cn("size-2 rounded-full", STAGE_DOT[f.stage])} />
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STAGES.map((s2) => (
+                              <SelectItem key={s2} value={s2}>
+                                {STAGE_LABELS[s2]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className={cn("size-2 rounded-full", STAGE_DOT[f.stage])} />
+                          {STAGE_LABELS[f.stage]}
+                        </span>
+                      )}
+                      {f.outcome && f.outcome !== "in_process" && (
+                        <span className={cn("ms-1 text-[10px] font-bold px-1.5 py-0.5 rounded", OUTCOME_BADGE[f.outcome])}>{OUTCOME_LABELS[f.outcome]}</span>
+                      )}
                     </td>
                     <td className="px-3 hidden lg:table-cell">{f.city}</td>
                     <td className="px-3 hidden xl:table-cell whitespace-nowrap" dir="ltr">

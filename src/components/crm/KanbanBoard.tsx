@@ -97,7 +97,7 @@ export const KanbanBoard = ({ onOpenFamily, onAddStudent }: Props) => {
   };
 
   const onDrop = (stage: Stage) => {
-    if (dragId && !can.edit) {
+    if (dragId && !can.status) {
       toast.error("אין לך הרשאה לשנות סטטוס");
     } else if (dragId) {
       const f = families.find((x) => x.id === dragId);
@@ -333,7 +333,7 @@ const FamilyCard = memo(
 
     return (
       <div
-        draggable={can.edit}
+        draggable={can.status}
         onDragStart={(e) => onDragStart(e, family.id)}
         onClick={() => onOpen(family.id)}
         role="group"

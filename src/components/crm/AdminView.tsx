@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { ShieldCheck, UserPlus, KeyRound, Loader2, CalendarPlus, Save, Building2, Users, CheckCircle2, KeySquare } from "lucide-react";
+import { ShieldCheck, UserPlus, KeyRound, Loader2, CalendarPlus, Save, Building2, Users, CheckCircle2, KeySquare, ListChecks, History } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isDemoMode } from "@/lib/api";
 import { useSession, Profile } from "@/lib/session";
 import { RolesTab, useRoles } from "@/components/crm/admin/RolesTab";
+import { ListsTab } from "@/components/crm/admin/ListsTab";
+import { AuditTab } from "@/components/crm/admin/AuditTab";
 import type { RoleRow } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -383,7 +385,7 @@ const SettingsTab = () => {
 export const AdminView = () => {
   const { can } = useSession();
   const demo = isDemoMode();
-  const def = can.manageUsers ? "users" : "years";
+  const def = can.manageUsers ? "users" : can.manageYears ? "years" : can.lists ? "lists" : can.audit ? "audit" : "settings";
   return (
     <div className="space-y-6 animate-fade-in">
       <header className="flex items-center gap-3">
@@ -397,7 +399,7 @@ export const AdminView = () => {
       </header>
       {demo && <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm">במצב הדגמה מסך הניהול מוצג לצפייה בלבד.</div>}
       <Tabs defaultValue={def} dir="rtl">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           {can.manageUsers && (
             <TabsTrigger value="users">
               <Users size={14} className="me-1" /> משתמשים
@@ -411,6 +413,16 @@ export const AdminView = () => {
           {can.manageYears && (
             <TabsTrigger value="years">
               <CalendarPlus size={14} className="me-1" /> שנות רישום
+            </TabsTrigger>
+          )}
+          {can.lists && (
+            <TabsTrigger value="lists">
+              <ListChecks size={14} className="me-1" /> רשימות
+            </TabsTrigger>
+          )}
+          {can.audit && (
+            <TabsTrigger value="audit">
+              <History size={14} className="me-1" /> לוג פעולות
             </TabsTrigger>
           )}
           {can.settings && (
@@ -432,6 +444,16 @@ export const AdminView = () => {
         {!demo && can.manageYears && (
           <TabsContent value="years">
             <YearsTab />
+          </TabsContent>
+        )}
+        {!demo && can.lists && (
+          <TabsContent value="lists">
+            <ListsTab />
+          </TabsContent>
+        )}
+        {!demo && can.audit && (
+          <TabsContent value="audit">
+            <AuditTab />
           </TabsContent>
         )}
         {!demo && can.settings && (

@@ -1,0 +1,20 @@
+const { chromium } = require('playwright'); const path = require('path');
+const S = path.join(__dirname, 'shots'); const BASE = 'http://127.0.0.1:4173';
+(async () => {
+  const b = await chromium.launch({ proxy: process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY, bypass: '127.0.0.1,localhost' } : undefined });
+  const errs = []; const p = await (await b.newContext({ viewport: { width: 1400, height: 1000 }, locale: 'he-IL', timezoneId: 'Asia/Jerusalem' })).newPage(); p.on('pageerror', e => errs.push(e.message));
+  await p.goto(BASE + '/auth'); await p.getByLabel('אימייל').fill('e2e-secretary@test.local'); await p.getByLabel('סיסמה').fill(process.env.E2E_PW);
+  await p.getByRole('button', { name: 'כניסה' }).click(); await p.getByRole('heading', { name: 'המשימות להיום' }).waitFor({ timeout: 30000 });
+  await p.getByRole('button', { name: /לוח שנה/ }).click();
+  await p.getByRole('heading', { name: /לוח שנה/ }).waitFor();
+  await p.waitForTimeout(1500);
+  await p.screenshot({ path: S + '/cal-01-month.png' });
+  console.log((await p.getByText(/חנוכה|ראש חודש|פ' /).first().isVisible()) ? 'PASS Jewish holidays / parasha shown' : 'FAIL holidays');
+  await p.getByRole('tab', { name: 'שבוע' }).click(); await p.waitForTimeout(500);
+  await p.screenshot({ path: S + '/cal-02-week.png' });
+  console.log('PASS week view');
+  await p.getByLabel('חיפוש ביומן').fill('כרטיס'); await p.getByRole('tab', { name: 'חודש' }).click(); await p.waitForTimeout(500);
+  await p.getByRole('button', { name: 'ליומן גוגל' }).click();
+  console.log((await p.getByText('מכתובת URL').isVisible()) ? 'PASS google calendar instructions' : 'FAIL feed popover');
+  console.log('ERRORS', errs.length ? errs : 'none'); await b.close();
+})().catch(e => { console.log('FATAL', e.message.slice(0, 300)); process.exit(1); });

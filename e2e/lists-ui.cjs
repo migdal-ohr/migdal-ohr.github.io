@@ -1,0 +1,31 @@
+const { chromium } = require('playwright'); const path = require('path'); const fs = require('fs');
+const S = path.join(__dirname, 'shots'); const BASE = 'http://127.0.0.1:4173';
+(async () => {
+  // a tiny CBS-style localities file
+  const XLSX = require('xlsx'); const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ 'סמל יישוב': 874, 'שם יישוב': 'מגדל העמק', 'שם יישוב לועזי': 'MIGDAL HAEMEQ' }, { 'סמל יישוב': 3000, 'שם יישוב': 'ירושלים', 'שם יישוב לועזי': 'JERUSALEM' }]), 'x');
+  const cityFile = path.join(S, 'cities-test.xlsx'); XLSX.writeFile(wb, cityFile);
+  const b = await chromium.launch({ proxy: process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY, bypass: '127.0.0.1,localhost' } : undefined });
+  const errs = []; const p = await (await b.newContext({ viewport: { width: 1400, height: 1000 }, locale: 'he-IL' })).newPage(); p.on('pageerror', e => errs.push(e.message));
+  await p.goto(BASE + '/auth'); await p.getByLabel('אימייל').fill('e2e-admin@test.local'); await p.getByLabel('סיסמה').fill(process.env.E2E_PW);
+  await p.getByRole('button', { name: 'כניסה' }).click(); await p.getByRole('heading', { name: 'המשימות להיום' }).waitFor({ timeout: 30000 });
+  await p.getByRole('button', { name: /ניהול מערכת/ }).click();
+  await p.getByRole('tab', { name: /רשימות/ }).click();
+  await p.getByRole('tab', { name: /פעילים/ }).click();
+  await p.getByPlaceholder('שם הפעיל').fill('E2E פעיל'); await p.getByRole('button', { name: 'הוספה' }).click();
+  await p.locator('input[aria-label="שם"]').first().waitFor(); console.log('PASS recruiter added');
+  await p.getByRole('tab', { name: /יישובים/ }).click();
+  const [fc] = await Promise.all([p.waitForEvent('filechooser'), p.getByRole('button', { name: /ייבוא קובץ היישובים/ }).click()]);
+  await fc.setFiles(cityFile); await p.getByText(/נטענו 2 יישובים/).waitFor({ timeout: 15000 }); console.log('PASS CBS localities import');
+  await p.getByRole('tab', { name: /מסמכים להבאה/ }).click();
+  console.log((await p.locator('input[aria-label="שם המסמך"][value="אישור מגורים"]').count()) ? 'PASS document catalog shows new docs' : 'FAIL docs');
+  await p.screenshot({ path: S + '/lists-01.png', fullPage: true });
+  await p.getByRole('tab', { name: /לוג פעולות/ }).click();
+  await p.getByRole('combobox', { name: 'משתמש' }).click(); await p.getByRole('option', { name: 'בדיקה secretary' }).click();
+  await p.getByText(/הוספה תלמיד|עדכון תלמיד/).first().waitFor({ timeout: 15000 }); console.log('PASS per-user activity log');
+  await p.getByRole('button', { name: /רשימת תלמידים/ }).click();
+  await p.getByRole('combobox', { name: /סטטוס של בדיקה כרטיס/ }).waitFor({ timeout: 15000 }).catch(() => {});
+  const inl = p.getByRole('combobox', { name: /סטטוס של / }).first();
+  console.log((await inl.isVisible()) ? 'PASS inline status change control' : 'FAIL inline');
+  console.log('ERRORS', errs.length ? errs : 'none'); await b.close();
+})().catch(e => { console.log('FATAL', e.message.slice(0, 300)); process.exit(1); });
