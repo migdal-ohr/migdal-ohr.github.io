@@ -28,6 +28,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { PrincipalCardSection } from "@/components/crm/principal/Principal";
 import { OutcomeChip, TourChip, FullDetailsSection, EventsSection, LogSection, SiblingsSection } from "@/components/crm/card/CardExtras";
 import { formatPhone, buildRemindDocsMessage, buildMeetingReminderMessage, buildRsvpUrl } from "@/lib/whatsapp";
 import { WhatsAppActionButton } from "./WhatsAppActionButton";
@@ -389,6 +390,7 @@ export const FamilyProfile = ({ familyId, onClose, onEdit, onOpenFamily, onAddSi
             </section>
 
             <SiblingsSection family={family} onOpenFamily={(id) => onOpenFamily?.(id)} onAddSibling={(p) => onAddSibling?.(p)} />
+            <PrincipalCardSection family={family} />
             <FullDetailsSection family={family} />
             <EventsSection family={family} />
             <LogSection family={family} />

@@ -16,7 +16,9 @@ import {
   ShieldCheck,
   WifiOff,
   Inbox,
+  Gavel,
 } from "lucide-react";
+import { usePrincipalBadge } from "@/components/crm/principal/Principal";
 import { useOpenRequestsCount } from "@/lib/requests";
 import { useSession } from "@/lib/session";
 import { useOnline } from "@/lib/online";
@@ -28,7 +30,7 @@ import { useCrm } from "@/store/crmStore";
 import { api } from "@/lib/api";
 import { hebrewYear, isSameDay } from "@/lib/dates";
 
-export type View = "dashboard" | "students" | "kanban" | "calendar" | "potentials" | "persuasion" | "stats" | "archive" | "requests" | "admin";
+export type View = "dashboard" | "students" | "kanban" | "calendar" | "potentials" | "persuasion" | "stats" | "archive" | "principal" | "requests" | "admin";
 
 interface Props {
   view: View;
@@ -46,6 +48,7 @@ const items: { id: View; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "potentials", label: "פוטנציאלים", icon: ScanLine },
   { id: "stats", label: "סטטיסטיקות", icon: BarChart3 },
   { id: "archive", label: "ארכיון", icon: Archive },
+  { id: "principal", label: "החלטות מנהל", icon: Gavel },
   { id: "requests", label: "בקשות ותקלות", icon: Inbox },
   { id: "admin", label: "ניהול מערכת", icon: ShieldCheck },
 ];
@@ -76,7 +79,14 @@ export const SidebarContent = ({ view, onChange, onNavigate, onOpenSearch }: Pro
   const { profile, roleRow, can, years, yearId, setYearId, selectedYear } = useSession();
   const online = useOnline();
   const openRequests = useOpenRequestsCount(can, profile?.user_id);
-  const visibleItems = items.filter((it) => it.id !== "admin" || can.manageYears || can.manageUsers || can.lists || can.settings || can.audit);
+  const principalCount = usePrincipalBadge();
+  const visibleItems = items.filter((it) =>
+    it.id === "admin"
+      ? can.manageYears || can.manageUsers || can.lists || can.settings || can.audit
+      : it.id === "principal"
+        ? can.principalDecide || can.principalRequest
+        : true,
+  );
   const complete = families.filter((f) => f.stage === "complete").length;
   const pct = families.length ? Math.round((complete / families.length) * 100) : 0;
 
@@ -121,7 +131,7 @@ export const SidebarContent = ({ view, onChange, onNavigate, onOpenSearch }: Pro
         {visibleItems.map((it) => {
           const Icon = it.icon;
           const active = view === it.id;
-          const count = it.id === "requests" ? openRequests || undefined : counts[it.id];
+          const count = it.id === "requests" ? openRequests || undefined : it.id === "principal" ? principalCount || undefined : counts[it.id];
           return (
             <button
               key={it.id}

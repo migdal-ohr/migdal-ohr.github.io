@@ -12,18 +12,20 @@ const PersuasionView = lazy(() => import("@/components/crm/PersuasionView").then
 const ArchiveView = lazy(() => import("@/components/crm/ArchiveView").then((m) => ({ default: m.ArchiveView })));
 const StudentsTable = lazy(() => import("@/components/crm/StudentsTable").then((m) => ({ default: m.StudentsTable })));
 const AdminView = lazy(() => import("@/components/crm/AdminView").then((m) => ({ default: m.AdminView })));
+const PrincipalView = lazy(() => import("@/components/crm/principal/Principal").then((m) => ({ default: m.PrincipalView })));
 const RequestsView = lazy(() => import("@/components/crm/RequestsView").then((m) => ({ default: m.RequestsView })));
 const StatsView = lazy(() => import("@/components/crm/StatsView").then((m) => ({ default: m.StatsView })));
 import { FamilyProfile } from "@/components/crm/FamilyProfile";
 import { StudentForm } from "@/components/crm/StudentForm";
 import { MentionAlerts } from "@/components/crm/card/CardExtras";
+import { PrincipalAlerts } from "@/components/crm/principal/Principal";
 import type { Family } from "@/types/crm";
 import { CommandPalette } from "@/components/crm/CommandPalette";
 import { RsvpToastListener } from "@/components/crm/RsvpToastListener";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
-const VIEWS: View[] = ["dashboard", "students", "kanban", "calendar", "persuasion", "potentials", "stats", "archive", "requests", "admin"];
+const VIEWS: View[] = ["dashboard", "students", "kanban", "calendar", "persuasion", "potentials", "stats", "archive", "principal", "requests", "admin"];
 
 /** Keep the current screen in the URL hash so refresh / back button work. */
 const viewFromHash = (): View => {
@@ -146,6 +148,7 @@ const Shell = () => {
               {view === "potentials" && <PotentialsView onOpenFamily={openFamily} />}
               {view === "stats" && <StatsView onOpenFamily={openFamily} />}
               {view === "archive" && <ArchiveView onOpenFamily={openFamily} />}
+              {view === "principal" && <PrincipalView onOpenFamily={openFamily} />}
               {view === "requests" && <RequestsView />}
               {view === "admin" && <AdminView />}
             </Suspense>
@@ -166,6 +169,7 @@ const Shell = () => {
       />
       <StudentForm open={formOpen} onClose={() => setFormOpen(false)} family={editId ? getFamily(editId) : null} onOpenFamily={openFamily} prefill={prefill} />
       <MentionAlerts onOpenFamily={openFamily} />
+      <PrincipalAlerts onOpenFamily={openFamily} onOpenInbox={() => setView("principal")} />
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}

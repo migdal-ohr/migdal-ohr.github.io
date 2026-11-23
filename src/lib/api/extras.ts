@@ -255,3 +255,62 @@ export const deleteLogEntry = async (id: string) => {
   const { error } = await supabase.from("student_log").delete().eq("id", id);
   fail(error);
 };
+
+/* ------------------------------ principal decisions ------------------------------ */
+
+export interface PrincipalReview {
+  id: string;
+  student_id: string;
+  status: "pending" | "decided" | "cancelled";
+  request_note: string | null;
+  requested_by: string | null;
+  requested_by_name: string | null;
+  requested_at: string;
+  decision: "accept" | "reject" | null;
+  summary: string | null;
+  decided_by: string | null;
+  decided_by_name: string | null;
+  decided_at: string | null;
+  seen_at: string | null;
+}
+export const DECISION_LABELS: Record<"accept" | "reject", string> = { accept: "מתקבל", reject: "לא מתקבל" };
+
+/** All principal reviews visible to me (RLS scopes by permission + institution), live. */
+export const usePrincipalReviews = (enabled = true) => {
+  const [reviews, setReviews] = useState<PrincipalReview[]>([]);
+  const load = useCallback(async () => {
+    if (!enabled || demo()) return;
+    const { data } = await supabase.from("principal_reviews").select("*").neq("status", "cancelled").order("requested_at", { ascending: false }).limit(2000);
+    setReviews((data as PrincipalReview[]) ?? []);
+  }, [enabled]);
+  useEffect(() => {
+    if (!enabled || demo()) return;
+    load();
+    const ch = supabase
+      .channel(chan("reviews"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "principal_reviews" }, () => load())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [load, enabled]);
+  return { reviews, reload: load };
+};
+
+export const requestPrincipalReview = async (studentId: string, note?: string) => {
+  const { error } = await supabase.from("principal_reviews").insert({ student_id: studentId, request_note: note?.trim() || null });
+  if (error?.code === "23505") throw new Error("התלמיד כבר ממתין להחלטת מנהל");
+  fail(error);
+};
+export const decidePrincipalReview = async (id: string, decision: "accept" | "reject", summary: string) => {
+  const { error } = await supabase.from("principal_reviews").update({ status: "decided", decision, summary: summary.trim() || null }).eq("id", id);
+  fail(error);
+};
+export const cancelPrincipalReview = async (id: string) => {
+  const { error } = await supabase.from("principal_reviews").update({ status: "cancelled" }).eq("id", id);
+  fail(error);
+};
+export const markReviewSeen = async (id: string) => {
+  const { error } = await supabase.from("principal_reviews").update({ seen_at: new Date().toISOString() }).eq("id", id);
+  fail(error);
+};

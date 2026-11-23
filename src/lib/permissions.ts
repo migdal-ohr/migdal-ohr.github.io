@@ -43,6 +43,13 @@ export const PERMISSION_GROUPS: { title: string; items: PermissionDef[] }[] = [
     ],
   },
   {
+    title: "החלטת מנהל",
+    items: [
+      { key: "principal.request", label: "שליחת תלמיד להחלטת מנהל", hint: "מנהלת הרישום שולחת, ומקבלת את ההחלטה חזרה" },
+      { key: "principal.decide", label: "סיכום החלטת מנהל", hint: "רושם סיכום אחרי הפגישה ומחליט: מתקבל / לא מתקבל" },
+    ],
+  },
+  {
     title: "פוטנציאלים",
     items: [
       { key: "potentials.view", label: "צפייה בפוטנציאלים" },

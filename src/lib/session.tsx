@@ -69,6 +69,8 @@ export interface Permissions {
   settings: boolean;
   audit: boolean;
   handleRequests: boolean;
+  principalRequest: boolean;
+  principalDecide: boolean;
   /** institutions this role is limited to (null = all) */
   institutions: string[] | null;
 }
@@ -102,6 +104,8 @@ export const permsFromRole = (r: RoleRow | null | undefined, active = true): Per
     settings: has("admin.settings"),
     audit: has("admin.audit"),
     handleRequests: has("requests.handle"),
+    principalRequest: has("principal.request"),
+    principalDecide: has("principal.decide"),
     institutions: r && !r.is_admin && r.institutions?.length ? r.institutions : null,
   };
 };
