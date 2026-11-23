@@ -18,7 +18,7 @@ import {
   Inbox,
 } from "lucide-react";
 import { useOpenRequestsCount } from "@/lib/requests";
-import { useSession, ROLE_LABELS } from "@/lib/session";
+import { useSession } from "@/lib/session";
 import { useOnline } from "@/lib/online";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
@@ -73,10 +73,10 @@ export const SidebarContent = ({ view, onChange, onNavigate, onOpenSearch }: Pro
     } as Partial<Record<View, number>>;
   }, [families, archivedFamilies, appointments]);
 
-  const { profile, role, can, years, yearId, setYearId, selectedYear } = useSession();
+  const { profile, roleRow, can, years, yearId, setYearId, selectedYear } = useSession();
   const online = useOnline();
-  const openRequests = useOpenRequestsCount(role, profile?.user_id);
-  const visibleItems = items.filter((it) => it.id !== "admin" || can.manageYears || can.manageUsers);
+  const openRequests = useOpenRequestsCount(can, profile?.user_id);
+  const visibleItems = items.filter((it) => it.id !== "admin" || can.manageYears || can.manageUsers || can.lists || can.settings || can.audit);
   const complete = families.filter((f) => f.stage === "complete").length;
   const pct = families.length ? Math.round((complete / families.length) * 100) : 0;
 
@@ -198,7 +198,7 @@ export const SidebarContent = ({ view, onChange, onNavigate, onOpenSearch }: Pro
       {profile && (
         <div className="mx-3 px-4 pt-2 text-[11px] text-muted-foreground">
           <span className="font-semibold text-foreground">{profile.full_name || profile.email}</span>
-          {role && ` · ${ROLE_LABELS[role]}`}
+          {roleRow && ` · ${roleRow.name}`}
         </div>
       )}
       <button

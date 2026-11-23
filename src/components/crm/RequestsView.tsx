@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MessageSquarePlus, Bug, Lightbulb, HelpCircle, Loader2, Send, ArrowUpCircle, Inbox, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isDemoMode } from "@/lib/api";
-import { useSession, ROLE_LABELS, Role } from "@/lib/session";
+import { useSession, roleLabel } from "@/lib/session";
 import {
   StaffRequest,
   RequestKind,
@@ -39,12 +39,12 @@ const fmt = (iso: string) =>
   new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 const NewRequestForm = ({ onSent }: { onSent: () => void }) => {
-  const { role } = useSession();
+  const { can } = useSession();
   const [kind, setKind] = useState<RequestKind>("bug");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
-  const goesTo = routeFor(role) === "admin" ? "מנהל המערכת" : "מנהלת הרישום";
+  const goesTo = routeFor(can) === "admin" ? "מנהל המערכת" : "מנהלת הרישום";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,7 +154,7 @@ const RequestCard = ({ r, canHandle, isAdmin, onChanged }: { r: StaffRequest; ca
       {r.body && <p className="text-sm whitespace-pre-wrap text-foreground/90">{r.body}</p>}
       <p className="text-xs text-muted-foreground">
         {r.author_name ?? "—"}
-        {r.author_role ? ` · ${ROLE_LABELS[r.author_role as Role] ?? r.author_role}` : ""} · {fmt(r.created_at)}
+        {r.author_role ? ` · ${roleLabel(r.author_role)}` : ""} · {fmt(r.created_at)}
       </p>
 
       {!editable && (r.response || r.version) && (
@@ -207,10 +207,10 @@ const RequestCard = ({ r, canHandle, isAdmin, onChanged }: { r: StaffRequest; ca
 };
 
 export const RequestsView = () => {
-  const { role, profile } = useSession();
+  const { can, profile } = useSession();
   const demo = isDemoMode();
-  const level = handledLevel(role);
-  const isAdmin = role === "admin";
+  const level = handledLevel(can);
+  const isAdmin = can.isAdmin;
   const [rows, setRows] = useState<StaffRequest[]>([]);
   const [loading, setLoading] = useState(!demo);
   const [filter, setFilter] = useState<"open" | "all">("open");

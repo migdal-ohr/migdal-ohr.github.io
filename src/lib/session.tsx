@@ -4,32 +4,32 @@ import { isDemoMode } from "@/lib/api";
 import { setSchoolYearScope } from "@/lib/api/supabaseBackend";
 import { setInstitutionSettings, InstitutionSettings, DEFAULT_INSTITUTION } from "@/lib/whatsapp";
 
-export type Role = "admin" | "manager" | "secretary" | "interviewer" | "viewer";
+import type { RoleRow } from "@/lib/permissions";
 
-export const ROLE_LABELS: Record<Role, string> = {
+/** Built-in role keys (custom roles have key null → "custom"). */
+export type Role = "admin" | "manager" | "secretary" | "interviewer" | "viewer" | "custom";
+
+export const ROLE_LABELS: Record<string, string> = {
   admin: "מנהל מערכת",
   manager: "מנהל/ת רישום",
   secretary: "מזכירה",
   interviewer: "מראיין (תחנות בלבד)",
   viewer: "צפייה בלבד",
+  custom: "תפקיד מותאם",
 };
-
-export const ROLE_DESCRIPTIONS: Record<Role, string> = {
-  admin: "הכל, כולל ניהול משתמשים והגדרות",
-  manager: "הכל על הנתונים, כולל מחיקה ופתיחת שנת רישום",
-  secretary: "הוספה, עריכה, פגישות, וואטסאפ וארכיון. בלי מחיקה סופית",
-  interviewer: "צפייה וסימון תחנות ביום הרישום בלבד",
-  viewer: "צפייה בלבד, בלי שינויים",
-};
-
-const RANK: Record<Role, number> = { admin: 5, manager: 4, secretary: 3, interviewer: 2, viewer: 1 };
+/** Display name for a role key or role name stored on old rows. */
+export const roleLabel = (r?: string | null) => (r ? ROLE_LABELS[r] ?? r : "");
 
 export interface Profile {
   user_id: string;
   email: string;
   full_name: string;
   role: Role;
+  role_id: string;
   is_active: boolean;
+  institutions: string[];
+  calendar_token?: string;
+  roles?: RoleRow | null;
 }
 
 export interface SchoolYear {
@@ -41,34 +41,78 @@ export interface SchoolYear {
 }
 
 export interface Permissions {
+  /** generic check by permission key (see lib/permissions.ts) */
+  has: (perm: string) => boolean;
+  isAdmin: boolean;
   view: boolean;
-  stations: boolean;
+  add: boolean;
   edit: boolean;
+  status: boolean;
+  archive: boolean;
   delete: boolean;
-  manageYears: boolean;
+  notes: boolean;
+  files: boolean;
+  export: boolean;
+  appointments: boolean;
+  attendance: boolean;
+  stations: boolean;
+  interviews: boolean;
+  whatsapp: boolean;
+  printForms: boolean;
+  printReports: boolean;
+  potentialsView: boolean;
+  potentialsEdit: boolean;
   manageUsers: boolean;
+  manageYears: boolean;
+  lists: boolean;
   settings: boolean;
   audit: boolean;
+  handleRequests: boolean;
+  /** institutions this role is limited to (null = all) */
+  institutions: string[] | null;
 }
 
-const permsFor = (role: Role | null): Permissions => {
-  const r = role ? RANK[role] : 0;
+export const permsFromRole = (r: RoleRow | null | undefined, active = true): Permissions => {
+  const has = (p: string) => !!active && !!r && (r.is_admin || !!r.perms?.[p]);
   return {
-    view: r >= 1,
-    stations: r >= 2,
-    edit: r >= 3,
-    delete: r >= 4,
-    manageYears: r >= 4,
-    audit: r >= 4,
-    manageUsers: r >= 5,
-    settings: r >= 5,
+    has,
+    isAdmin: !!active && !!r?.is_admin,
+    view: has("students.view"),
+    add: has("students.add"),
+    edit: has("students.edit"),
+    status: has("students.status"),
+    archive: has("students.archive"),
+    delete: has("students.delete"),
+    notes: has("sensitive.notes"),
+    files: has("sensitive.files"),
+    export: has("export"),
+    appointments: has("appointments.manage"),
+    attendance: has("appointments.attendance"),
+    stations: has("stations.mark"),
+    interviews: has("interviews.write"),
+    whatsapp: has("whatsapp.send"),
+    printForms: has("print.forms"),
+    printReports: has("print.reports"),
+    potentialsView: has("potentials.view"),
+    potentialsEdit: has("potentials.edit"),
+    manageUsers: has("admin.users"),
+    manageYears: has("admin.years"),
+    lists: has("admin.lists"),
+    settings: has("admin.settings"),
+    audit: has("admin.audit"),
+    handleRequests: has("requests.handle"),
+    institutions: r && !r.is_admin && r.institutions?.length ? r.institutions : null,
   };
 };
+
+const DEMO_ROLE: RoleRow = { id: "demo", key: "admin", name: "מנהל מערכת", description: null, is_admin: true, perms: {}, institutions: [], sort: 1 };
 
 interface SessionValue {
   loading: boolean;
   profile: Profile | null;
   role: Role | null;
+  /** the user's role row (name, permissions) */
+  roleRow: RoleRow | null;
   can: Permissions;
   years: SchoolYear[];
   yearId: string | null;
@@ -89,7 +133,9 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
   const demo = isDemoMode();
   const [loading, setLoading] = useState(!demo);
   const [profile, setProfile] = useState<Profile | null>(
-    demo ? { user_id: "demo", email: "demo@migdal-ohr.local", full_name: "משתמש הדגמה", role: "admin", is_active: true } : null,
+    demo
+      ? { user_id: "demo", email: "demo@migdal-ohr.local", full_name: "משתמש הדגמה", role: "admin", role_id: "demo", is_active: true, institutions: [], roles: DEMO_ROLE }
+      : null,
   );
   const [years, setYears] = useState<SchoolYear[]>(demo ? DEMO_YEARS : []);
   const [yearId, setYearIdState] = useState<string | null>(demo ? "demo-year" : null);
@@ -129,11 +175,12 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
       }
       const { data } = await supabase
         .from("profiles")
-        .select("user_id, email, full_name, role, is_active")
+        .select("user_id, email, full_name, role, role_id, is_active, institutions, calendar_token, roles(id, key, name, description, is_admin, perms, institutions, sort)")
         .eq("user_id", auth.user.id)
         .maybeSingle();
       if (!alive) return;
-      setProfile((data as Profile) ?? null);
+      const row = data as unknown as (Profile & { roles: RoleRow | RoleRow[] | null }) | null;
+      setProfile(row ? { ...row, roles: Array.isArray(row.roles) ? row.roles[0] ?? null : row.roles } : null);
       await Promise.all([reloadYears(), reloadSettings()]);
       if (alive) setLoading(false);
     };
@@ -145,6 +192,7 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
     const ch = supabase
       .channel(`me-${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "roles" }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "school_years" }, () => reloadYears())
       .subscribe();
     return () => {
@@ -160,12 +208,14 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const role = profile?.is_active ? profile.role : null;
+  const roleRow = (profile?.is_active ? profile.roles : null) ?? null;
   const value = useMemo<SessionValue>(
     () => ({
       loading,
       profile,
       role,
-      can: permsFor(role),
+      roleRow,
+      can: permsFromRole(roleRow, !!profile?.is_active),
       years,
       yearId,
       selectedYear: years.find((y) => y.id === yearId) ?? null,
@@ -175,7 +225,7 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
       reloadSettings,
       scopeKey: yearId ?? "none",
     }),
-    [loading, profile, role, years, yearId, setYearId, reloadYears, settings, reloadSettings],
+    [loading, profile, role, roleRow, years, yearId, setYearId, reloadYears, settings, reloadSettings],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

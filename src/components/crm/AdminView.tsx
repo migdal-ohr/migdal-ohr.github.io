@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ShieldCheck, UserPlus, KeyRound, Loader2, CalendarPlus, Save, Building2, Users, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, UserPlus, KeyRound, Loader2, CalendarPlus, Save, Building2, Users, CheckCircle2, KeySquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { isDemoMode } from "@/lib/api";
-import { useSession, ROLE_LABELS, ROLE_DESCRIPTIONS, Role, Profile } from "@/lib/session";
+import { useSession, Profile } from "@/lib/session";
+import { RolesTab, useRoles } from "@/components/crm/admin/RolesTab";
+import type { RoleRow } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +15,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const ROLES: Role[] = ["admin", "manager", "secretary", "interviewer", "viewer"];
 
 const genPassword = () => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -41,13 +42,14 @@ const callAdmin = async (body: Record<string, unknown>) => {
 /* =============================== Users =============================== */
 
 const UsersTab = () => {
-  const { profile: me } = useSession();
+  const { profile: me, can } = useSession();
+  const { roles } = useRoles();
   const [users, setUsers] = useState<Profile[] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [pwFor, setPwFor] = useState<Profile | null>(null);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase.from("profiles").select("user_id, email, full_name, role, is_active").order("created_at");
+    const { data, error } = await supabase.from("profiles").select("user_id, email, full_name, role, role_id, is_active, institutions").order("created_at");
     if (error) toast.error(error.message);
     setUsers((data as Profile[]) ?? []);
   }, []);
@@ -56,12 +58,12 @@ const UsersTab = () => {
   }, [load]);
 
   const update = async (u: Profile, patch: Partial<Profile>) => {
-    if (u.user_id === me?.user_id && (patch.role && patch.role !== "admin" || patch.is_active === false)) {
-      toast.error("אי אפשר להוריד לעצמך את הרשאת המנהל");
+    if (u.user_id === me?.user_id && ((patch.role_id && patch.role_id !== u.role_id) || patch.is_active === false)) {
+      toast.error("אי אפשר לשנות לעצמך את התפקיד או להשבית את עצמך");
       return;
     }
     const { error } = await supabase.from("profiles").update(patch).eq("user_id", u.user_id);
-    if (error) toast.error(error.message);
+    if (error) toast.error(/system admin|not allowed/i.test(error.message) ? "רק מנהל מערכת יכול לשנות מנהל מערכת" : error.message);
     else {
       toast.success("עודכן");
       load();
@@ -98,14 +100,14 @@ const UsersTab = () => {
                 {u.user_id === me?.user_id && " (את/ה)"}
               </div>
             </div>
-            <Select value={u.role} onValueChange={(v) => update(u, { role: v as Role })}>
-              <SelectTrigger className="w-52">
+            <Select value={u.role_id} onValueChange={(v) => update(u, { role_id: v })}>
+              <SelectTrigger className="w-56" aria-label="תפקיד">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {ROLE_LABELS[r]}
+                {(roles ?? []).filter((r) => !r.is_admin || can.isAdmin || r.id === u.role_id).map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -122,22 +124,25 @@ const UsersTab = () => {
       </div>
       <div className="rounded-xl border p-4 bg-muted/30 text-sm space-y-1">
         <div className="font-semibold mb-1">מה כל תפקיד יכול לעשות</div>
-        {ROLES.map((r) => (
-          <div key={r}>
-            <b>{ROLE_LABELS[r]}:</b> {ROLE_DESCRIPTIONS[r]}
+        {(roles ?? []).map((r) => (
+          <div key={r.id}>
+            <b>{r.name}:</b> {r.description || "הרשאות לפי מה שסומן בלשונית תפקידים"}
           </div>
         ))}
+        <div className="text-xs text-muted-foreground pt-1">יוצרים תפקידים ומשנים הרשאות בלשונית "תפקידים".</div>
       </div>
-      <CreateUserDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} />
+      <CreateUserDialog roles={roles ?? []} open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} />
       <PasswordDialog user={pwFor} onClose={() => setPwFor(null)} />
     </div>
   );
 };
 
-const CreateUserDialog = ({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) => {
+const CreateUserDialog = ({ roles, open, onClose, onCreated }: { roles: RoleRow[]; open: boolean; onClose: () => void; onCreated: () => void }) => {
+  const { can } = useSession();
+  const pickable = roles.filter((r) => !r.is_admin || can.isAdmin);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<Role>("secretary");
+  const [roleId, setRoleId] = useState<string>("");
   const [password, setPassword] = useState(genPassword());
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
@@ -146,16 +151,16 @@ const CreateUserDialog = ({ open, onClose, onCreated }: { open: boolean; onClose
     if (open) {
       setEmail("");
       setName("");
-      setRole("secretary");
+      setRoleId(roles.find((r) => r.key === "secretary")?.id ?? roles[0]?.id ?? "");
       setPassword(genPassword());
       setDone(null);
     }
-  }, [open]);
+  }, [open, roles]);
 
   const submit = async () => {
     setBusy(true);
     try {
-      await callAdmin({ action: "create", email, full_name: name, role, password });
+      await callAdmin({ action: "create", email, full_name: name, role_id: roleId, password });
       setDone(`אימייל: ${email}\nסיסמה זמנית: ${password}`);
       onCreated();
     } catch (e) {
@@ -202,25 +207,25 @@ const CreateUserDialog = ({ open, onClose, onCreated }: { open: boolean; onClose
             </div>
             <div className="space-y-1">
               <Label>תפקיד</Label>
-              <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-                <SelectTrigger>
-                  <SelectValue />
+              <Select value={roleId} onValueChange={setRoleId}>
+                <SelectTrigger aria-label="תפקיד">
+                  <SelectValue placeholder="בחרו תפקיד" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {ROLE_LABELS[r]}
+                  {pickable.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">{ROLE_DESCRIPTIONS[role]}</p>
+              <p className="text-xs text-muted-foreground">{roles.find((r) => r.id === roleId)?.description}</p>
             </div>
             <div className="space-y-1">
               <Label>סיסמה זמנית</Label>
               <Input value={password} onChange={(e) => setPassword(e.target.value)} dir="ltr" />
             </div>
-            <Button className="w-full" onClick={submit} disabled={busy || !email}>
+            <Button className="w-full" onClick={submit} disabled={busy || !email || !roleId}>
               {busy && <Loader2 className="animate-spin" />} יצירת משתמש
             </Button>
           </div>
@@ -387,7 +392,7 @@ export const AdminView = () => {
         </div>
         <div>
           <h2 className="font-display text-3xl font-bold">ניהול מערכת</h2>
-          <p className="text-muted-foreground mt-1">משתמשים והרשאות, שנות רישום והגדרות המוסד</p>
+          <p className="text-muted-foreground mt-1">משתמשים, תפקידים והרשאות, שנות רישום, רשימות והגדרות המוסד</p>
         </div>
       </header>
       {demo && <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm">במצב הדגמה מסך הניהול מוצג לצפייה בלבד.</div>}
@@ -396,6 +401,11 @@ export const AdminView = () => {
           {can.manageUsers && (
             <TabsTrigger value="users">
               <Users size={14} className="me-1" /> משתמשים
+            </TabsTrigger>
+          )}
+          {can.manageUsers && (
+            <TabsTrigger value="roles">
+              <KeySquare size={14} className="me-1" /> תפקידים והרשאות
             </TabsTrigger>
           )}
           {can.manageYears && (
@@ -412,6 +422,11 @@ export const AdminView = () => {
         {!demo && can.manageUsers && (
           <TabsContent value="users">
             <UsersTab />
+          </TabsContent>
+        )}
+        {!demo && can.manageUsers && (
+          <TabsContent value="roles">
+            <RolesTab />
           </TabsContent>
         )}
         {!demo && can.manageYears && (

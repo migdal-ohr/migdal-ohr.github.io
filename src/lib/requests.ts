@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { isDemoMode } from "@/lib/api";
-import type { Role } from "@/lib/session";
+import type { Permissions } from "@/lib/session";
 
 export type RequestKind = "bug" | "feature" | "question";
 export type RequestStatus = "new" | "in_progress" | "done" | "rejected";
@@ -39,16 +39,17 @@ export const STATUS_LABELS: Record<RequestStatus, string> = {
 };
 
 /** Which level this role handles (null = only submits). */
-export const handledLevel = (role: Role | null): RequestLevel | null =>
-  role === "admin" ? "admin" : role === "manager" ? "manager" : null;
+export const handledLevel = (can: Pick<Permissions, "isAdmin" | "handleRequests">): RequestLevel | null =>
+  can.isAdmin ? "admin" : can.handleRequests ? "manager" : null;
 
 /** Where a request written by this role goes. */
-export const routeFor = (role: Role | null): RequestLevel => (role === "admin" || role === "manager" ? "admin" : "manager");
+export const routeFor = (can: Pick<Permissions, "isAdmin" | "handleRequests">): RequestLevel =>
+  can.isAdmin || can.handleRequests ? "admin" : "manager";
 
 /** Live count of open requests waiting for me (for the sidebar badge). */
-export const useOpenRequestsCount = (role: Role | null, userId?: string): number => {
+export const useOpenRequestsCount = (can: Pick<Permissions, "isAdmin" | "handleRequests">, userId?: string): number => {
   const [count, setCount] = useState(0);
-  const level = handledLevel(role);
+  const level = handledLevel(can);
   useEffect(() => {
     if (!level || isDemoMode()) return;
     let alive = true;
